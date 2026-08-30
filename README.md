@@ -5,7 +5,7 @@ Admissions CRM and partner lead-delivery platform built with React, TypeScript, 
 ## Stack
 
 - Web: React 18, TypeScript, Vite, Tailwind, TanStack Query
-- API: Node.js 20+, TypeScript, Express 5
+- API: Node.js 24+, TypeScript, Express 5
 - Data: PostgreSQL 16 and Prisma
 - Files: AWS S3 or Cloudflare R2 through presigned URLs
 - Authentication: passwordless email OTP through AWS SES and signed 12-hour sessions
