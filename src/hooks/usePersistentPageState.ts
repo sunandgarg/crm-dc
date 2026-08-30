@@ -306,7 +306,6 @@ export function usePersistentPageState<T extends object>(
   // Never call setState during render (it can cause React to remount/reset in strict mode).
   const initialSnapshot = useMemo(() => {
     return loadPageState<{ state: T; fileMetas: Record<string, FileMeta> }>(basePath, subSlug);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [basePath, subSlug]);
 
   // File metadata storage (persisted with state)

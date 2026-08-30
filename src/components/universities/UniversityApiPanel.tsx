@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { supabase, supabaseProjectUrl } from '@/integrations/supabase/client';
 import { Copy, Check, Key, RefreshCw, Eye, EyeOff, Code, Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
@@ -18,11 +18,7 @@ export function UniversityApiPanel({ universityId, universityName }: UniversityA
 
   const supabaseUrl = supabaseProjectUrl;
 
-  useEffect(() => {
-    fetchApiKey();
-  }, [universityId]);
-
-  const fetchApiKey = async () => {
+  const fetchApiKey = useCallback(async () => {
     try {
       const { data, error } = await supabase
         .from('university_api_keys')
@@ -51,7 +47,11 @@ export function UniversityApiPanel({ universityId, universityName }: UniversityA
     } finally {
       setLoading(false);
     }
-  };
+  }, [universityId]);
+
+  useEffect(() => {
+    void fetchApiKey();
+  }, [fetchApiKey]);
 
   const regenerateApiKey = async () => {
     if (!window.confirm('Regenerating will invalidate the current API key. Continue?')) return;

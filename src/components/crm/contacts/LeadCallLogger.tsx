@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -70,11 +70,7 @@ export function LeadCallLogger({ contact, onCallLogged }: LeadCallLoggerProps) {
     nextFollowUp: '',
   });
 
-  useEffect(() => {
-    fetchCallLogs();
-  }, [contact.id]);
-
-  const fetchCallLogs = async () => {
+  const fetchCallLogs = useCallback(async () => {
     try {
       const { data, error } = await supabase
         .from('crm_activities')
@@ -90,7 +86,11 @@ export function LeadCallLogger({ contact, onCallLogged }: LeadCallLoggerProps) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [contact.id]);
+
+  useEffect(() => {
+    void fetchCallLogs();
+  }, [fetchCallLogs]);
 
   const initiateCall = () => {
     // Open phone dialer

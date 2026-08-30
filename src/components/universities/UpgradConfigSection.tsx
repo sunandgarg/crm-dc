@@ -185,7 +185,7 @@ export function UpgradConfigSection({
   secretKey,
   universityName,
 }: Props) {
-  const sample: Record<string, string> = sampleData || {
+  const sample = useMemo<Record<string, string>>(() => sampleData || ({
     firstname: "FirstName",
     lastname: "LastName",
     email: "user@upgrad.com",
@@ -198,7 +198,7 @@ export function UpgradConfigSection({
     affiliateSource: "aff_id=1&sub_aff_id=12",
     "extraFields.chatLink": "haptik.com/1234567",
     emailTemplateSuffix: "in",
-  };
+  }), [sampleData]);
 
   const update = <K extends keyof UpgradConfig>(key: K, value: UpgradConfig[K]) =>
     onChange({ ...config, [key]: value });

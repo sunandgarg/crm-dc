@@ -1,9 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import { Router } from 'express';
-import type { Request } from 'express';
 import { prisma } from '../db.js';
 import { asyncRoute, HttpError } from '../http.js';
 import { config, isProduction } from '../config.js';
+import { assertProviderWebhook, type RawRequest } from '../services/webhookSecurity.js';
 
 export const publicFunctionsRouter = Router();
 
@@ -34,14 +34,9 @@ async function captureLead(body: Record<string, any>, source: string) {
   return null;
 }
 
-function assertWebhook(request: Request) {
-  if (!isProduction) return;
-  if (!config.WEBHOOK_SECRET) throw new HttpError(503, 'Webhook secret is not configured');
-  if (request.header('x-webhook-secret') !== config.WEBHOOK_SECRET) throw new HttpError(401, 'Invalid webhook secret');
-}
-
 publicFunctionsRouter.post('/receive-lead', asyncRoute(async (request, response) => {
-  const providedKey = String(request.header('x-api-key') || request.query.api_key || request.body?.api_key || '');
+  const authorization = request.header('authorization');
+  const providedKey = String(request.header('x-api-key') || (authorization?.startsWith('Bearer ') ? authorization.slice(7) : ''));
   const keys = await prisma.resourceRecord.findMany({ where: { resource: { in: ['url_api_keys', 'university_api_keys'] } } });
   const knownKeys = keys.map((row) => row.payload as Record<string, unknown>).filter((row) => row.is_active !== false).map((row) => String(row.api_key || row.key || ''));
   if (config.INBOUND_API_KEY) knownKeys.push(config.INBOUND_API_KEY);
@@ -53,26 +48,27 @@ publicFunctionsRouter.post('/receive-lead', asyncRoute(async (request, response)
 publicFunctionsRouter.get('/meta-ads-webhook', (request, response) => {
   const challenge = request.query['hub.challenge'];
   const verifyToken = config.META_VERIFY_TOKEN;
-  if (request.query['hub.mode'] === 'subscribe' && (!verifyToken || request.query['hub.verify_token'] === verifyToken)) return response.status(200).send(String(challenge || ''));
+  if (!verifyToken) return response.sendStatus(isProduction ? 503 : 403);
+  if (request.query['hub.mode'] === 'subscribe' && request.query['hub.verify_token'] === verifyToken) return response.status(200).send(String(challenge || ''));
   response.sendStatus(403);
 });
 publicFunctionsRouter.post('/meta-ads-webhook', asyncRoute(async (request, response) => {
-  assertWebhook(request);
+  assertProviderWebhook(request as RawRequest, 'meta');
   await record('lead_events', { provider: 'meta', payload: request.body });
   response.status(202).json({ received: true });
 }));
 publicFunctionsRouter.post('/google-ads-webhook', asyncRoute(async (request, response) => {
-  assertWebhook(request);
+  assertProviderWebhook(request as RawRequest, 'google');
   const contact = await captureLead(request.body || {}, 'Google Ads');
   response.status(202).json({ received: true, contactId: contact?.id || null });
 }));
 publicFunctionsRouter.post('/netcore-email-webhook', asyncRoute(async (request, response) => {
-  assertWebhook(request);
+  assertProviderWebhook(request as RawRequest, 'netcore');
   await record('email_events', { provider: 'netcore', payload: request.body });
   response.status(202).json({ received: true });
 }));
 publicFunctionsRouter.all('/smtp-tracking', asyncRoute(async (request, response) => {
-  assertWebhook(request);
+  assertProviderWebhook(request as RawRequest, 'smtp');
   await record('smtp_tracking_events', { method: request.method, query: request.query, payload: request.body || {} });
   response.sendStatus(204);
 }));

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -51,6 +51,21 @@ const OPERATORS = [
   { value: 'in', label: 'Is One Of' },
 ];
 
+async function calculateSegmentCount(filterConfig: any): Promise<number> {
+  try {
+    let query = supabase.from('crm_contacts').select('id', { count: 'exact', head: true });
+    const conditions = filterConfig?.conditions || [];
+    for (const condition of conditions) {
+      if (condition.field === 'lead_quality' && condition.operator === 'equals') query = query.eq('lead_quality', condition.value);
+      else if (condition.field === 'lead_score' && condition.operator === 'greater_than') query = query.gt('lead_score', condition.value);
+    }
+    const { count } = await query;
+    return count || 0;
+  } catch {
+    return 0;
+  }
+}
+
 export function LeadSegmentsView() {
   const [segments, setSegments] = useState<LeadSegment[]>([]);
   const [loading, setLoading] = useState(true);
@@ -65,11 +80,7 @@ export function LeadSegmentsView() {
     logic: 'AND' as 'AND' | 'OR',
   });
 
-  useEffect(() => {
-    fetchSegments();
-  }, []);
-
-  const fetchSegments = async () => {
+  const fetchSegments = useCallback(async () => {
     try {
       const { data, error } = await supabase
         .from('lead_segments')
@@ -96,28 +107,11 @@ export function LeadSegmentsView() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  const calculateSegmentCount = async (filterConfig: any): Promise<number> => {
-    try {
-      // Simple count based on filter - in production this would be more sophisticated
-      let query = supabase.from('crm_contacts').select('id', { count: 'exact', head: true });
-      
-      const conditions = filterConfig?.conditions || [];
-      for (const cond of conditions) {
-        if (cond.field === 'lead_quality' && cond.operator === 'equals') {
-          query = query.eq('lead_quality', cond.value);
-        } else if (cond.field === 'lead_score' && cond.operator === 'greater_than') {
-          query = query.gt('lead_score', cond.value);
-        }
-      }
-      
-      const { count } = await query;
-      return count || 0;
-    } catch {
-      return 0;
-    }
-  };
+  useEffect(() => {
+    void fetchSegments();
+  }, [fetchSegments]);
 
   const addCondition = () => {
     setNewSegment(prev => ({

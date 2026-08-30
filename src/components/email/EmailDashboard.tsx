@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
@@ -36,17 +36,12 @@ export function EmailDashboard() {
   const [loading, setLoading] = useState(true);
   const [hasApiKey, setHasApiKey] = useState(true);
 
-  useEffect(() => {
-    checkApiKey();
-    fetchEvents();
-  }, [fromDate, toDate]);
-
-  const checkApiKey = async () => {
+  const checkApiKey = useCallback(async () => {
     const { data } = await supabase.from('email_api_settings').select('api_key').limit(1).single();
     setHasApiKey(!!(data?.api_key));
-  };
+  }, []);
 
-  const fetchEvents = async () => {
+  const fetchEvents = useCallback(async () => {
     setLoading(true);
     const { data, error } = await supabase
       .from('email_events')
@@ -55,7 +50,12 @@ export function EmailDashboard() {
       .lte('received_at', toDate.toISOString());
     if (!error) setEvents(data || []);
     setLoading(false);
-  };
+  }, [fromDate, toDate]);
+
+  useEffect(() => {
+    void checkApiKey();
+    void fetchEvents();
+  }, [checkApiKey, fetchEvents]);
 
   const kpiCounts = useMemo(() => {
     const counts: Record<string, number> = {};

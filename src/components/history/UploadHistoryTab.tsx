@@ -85,7 +85,7 @@ export function UploadHistoryTab({ universities }: UploadHistoryTabProps) {
         setLoading(false);
       }
     },
-    [cacheKey],
+    [cacheKey, dateFrom, dateTo, selectedUniversity, statusFilter],
   );
 
   useEffect(() => { fetchBatches(); }, [fetchBatches]);
@@ -121,7 +121,7 @@ export function UploadHistoryTab({ universities }: UploadHistoryTabProps) {
     return map;
   }, [universities]);
 
-  const getUniversityName = (id: string) => uniNameMap.get(id) || "Unknown";
+  const getUniversityName = useCallback((id: string) => uniNameMap.get(id) || "Unknown", [uniNameMap]);
 
   const getStatusBadge = (batch: UploadBatch) => {
     const processed = batch.success_count + batch.fail_count + (batch.duplicate_count || 0);
@@ -148,7 +148,7 @@ export function UploadHistoryTab({ universities }: UploadHistoryTabProps) {
       const fileName = batch.file_name?.toLowerCase() || "";
       return uniName.includes(term) || fileName.includes(term);
     });
-  }, [batches, searchTerm, uniNameMap]);
+  }, [batches, searchTerm, getUniversityName]);
 
   const clearFilters = () => {
     setSelectedUniversity("");

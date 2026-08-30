@@ -77,7 +77,7 @@ export function FeatureToggles() {
     if (tree.length > 0 && expandedGroups.size === 0) {
       setExpandedGroups(new Set(tree.map(t => t.toggle.feature_key)));
     }
-  }, [tree]);
+  }, [tree, expandedGroups.size]);
 
   const toggleMutation = useMutation({
     mutationFn: async ({ id, enabled }: { id: string; enabled: boolean }) => {

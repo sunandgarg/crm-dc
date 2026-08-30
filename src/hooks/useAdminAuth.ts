@@ -192,14 +192,14 @@ export function useAdminAuth(): AdminAuthState & { refetch: () => Promise<void> 
       isInitialCheckDoneRef.current = true;
       setState(fallbackState);
     }
-  }, [user?.id, user?.email]);
+  }, [user]);
 
   // Initial check - only when auth loading finishes and user changes
   useEffect(() => {
     if (!authLoading) {
       checkAdminStatus(true);
     }
-  }, [authLoading, user?.id]);
+  }, [authLoading, checkAdminStatus]);
 
   // Set up realtime subscription for profile changes
   useEffect(() => {
@@ -224,7 +224,7 @@ export function useAdminAuth(): AdminAuthState & { refetch: () => Promise<void> 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [user?.id, checkAdminStatus]);
+  }, [user, checkAdminStatus]);
 
   return {
     ...state,

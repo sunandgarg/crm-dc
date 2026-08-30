@@ -1,0 +1,11 @@
+{
+  "Rules": [
+    {
+      "ID": "expire-temporary-exports",
+      "Status": "Enabled",
+      "Filter": { "Prefix": "exports/" },
+      "Expiration": { "Days": 30 },
+      "AbortIncompleteMultipartUpload": { "DaysAfterInitiation": 1 }
+    }
+  ]
+}

@@ -1,0 +1,9 @@
+[
+  {
+    "AllowedOrigins": ["https://replace-with-crm-web-origin.example.com"],
+    "AllowedMethods": ["GET", "PUT", "HEAD"],
+    "AllowedHeaders": ["Content-Type", "Content-Length", "ETag"],
+    "ExposeHeaders": ["ETag"],
+    "MaxAgeSeconds": 3600
+  }
+]

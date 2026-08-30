@@ -6,22 +6,9 @@ import { asyncRoute, HttpError } from "../http.js";
 import { requireAdmin, requireAuth } from "../middleware/auth.js";
 import { buildPartnerRequest, processLead, processLeadBatch, type ApiConfig, type LeadTask } from "../services/leadPush.js";
 import { sendEmail } from "../services/otp.js";
-
-async function runQueueBatch(batchId: string) {
-  const pending = await prisma.leads.findMany({ where: { batch_id: batchId, status: "pending" }, orderBy: { created_at: "asc" }, take: 100 });
-  const university = pending[0] ? await prisma.universities.findUnique({ where: { id: pending[0].university_id } }) : null;
-  if (!university) return { processed: 0, results: [] };
-  const tasks = pending.map((lead) => ({
-    universityId: lead.university_id,
-    batchId,
-    leadData: { name: lead.name, email: lead.email, mobile: lead.mobile, state: lead.state || "", city: lead.city || "", course: lead.course || "", specialization: lead.specialization || "", ...((lead.extra_data as Record<string, string>) || {}) },
-  }));
-  const results = await processLeadBatch(tasks, university.default_push_concurrency || 1);
-  await Promise.all(pending.map((lead, index) => prisma.leads.update({ where: { id: lead.id }, data: { status: results[index].status, api_response: results[index].response, processed_at: new Date() } })));
-  const remaining = await prisma.leads.count({ where: { batch_id: batchId, status: "pending" } });
-  if (!remaining) await prisma.upload_batches.update({ where: { id: batchId }, data: { status: "completed", completed_at: new Date() } });
-  return { processed: results.length, results };
-}
+import { runAiGateway } from "../services/ai.js";
+import { runQueueBatch, runScheduledBatches } from "../services/batchProcessor.js";
+import { integrationReadiness } from "../services/readiness.js";
 
 export const functionsRouter = Router();
 functionsRouter.use(requireAuth);
@@ -164,13 +151,7 @@ functionsRouter.post("/cleanup-old-data", requireAdmin, asyncRoute(async (reques
 }));
 
 functionsRouter.post("/process-scheduled-batches", asyncRoute(async (_request, response) => {
-  const batches = await prisma.upload_batches.findMany({ where: { status: "scheduled", scheduled_at: { lte: new Date() }, is_cancelled: false }, orderBy: { scheduled_at: "asc" }, take: 20 });
-  const results = [];
-  for (const batch of batches) {
-    await prisma.upload_batches.update({ where: { id: batch.id }, data: { status: "processing" } });
-    results.push({ batchId: batch.id, ...(await runQueueBatch(batch.id)) });
-  }
-  response.json({ batches: results });
+  response.json({ batches: await runScheduledBatches() });
 }));
 
 functionsRouter.post("/sync-leads-to-crm", asyncRoute(async (request, response) => {
@@ -195,8 +176,12 @@ functionsRouter.post("/url-redirect", asyncRoute(async (request, response) => {
   response.json({ original_url: mapping.original_url, redirectTo: mapping.original_url });
 }));
 
-functionsRouter.post("/ai-gateway", asyncRoute(async (_request, response) => {
-  response.status(501).json({ error: "AI gateway requires an explicitly selected model provider and API credential" });
+functionsRouter.post("/ai-gateway", asyncRoute(async (request, response) => {
+  response.json(await runAiGateway(request.body));
+}));
+
+functionsRouter.post("/integration-readiness", requireAdmin, asyncRoute(async (_request, response) => {
+  response.json(integrationReadiness());
 }));
 
 functionsRouter.post("/:name", asyncRoute(async (request, response) => {

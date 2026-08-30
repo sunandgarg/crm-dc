@@ -7,7 +7,6 @@ import { Component, useEffect, useRef, memo, Suspense, lazy, forwardRef, type Re
 import { ProtectedRoute } from "./components/ProtectedRoute";
 import { appCache } from "@/hooks/useAppCache";
 import { useAdminAuth } from "@/hooks/useAdminAuth";
-import Index from "./pages/Index";
 
 const CHUNK_RELOAD_KEY = "app:chunk-reload-at";
 
@@ -64,6 +63,7 @@ const Auth = lazyWithRetry(() => import("./pages/Auth"));
 const NotFound = lazyWithRetry(() => import("./pages/NotFound"));
 const TelecallerApp = lazyWithRetry(() => import("./pages/TelecallerApp"));
 const UrlRedirect = lazyWithRetry(() => import("./pages/UrlRedirect"));
+const Index = lazyWithRetry(() => import("./pages/Index"));
 // Optimized QueryClient with aggressive caching
 const queryClient = new QueryClient({
   defaultOptions: {

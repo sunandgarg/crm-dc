@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/integrations/supabase/client';
@@ -32,6 +32,8 @@ interface CRMDashboardProps {
   universities: any[];
 }
 
+const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4'];
+
 export function CRMDashboard({ universities: _universities }: CRMDashboardProps) {
   const [stats, setStats] = useState({
     totalContacts: 0,
@@ -45,11 +47,7 @@ export function CRMDashboard({ universities: _universities }: CRMDashboardProps)
   const [taskStats, setTaskStats] = useState({ pending: 0, overdue: 0, completed: 0 });
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    fetchDashboardData();
-  }, []);
-
-  const fetchDashboardData = async () => {
+  const fetchDashboardData = useCallback(async () => {
     try {
       const [contactsRes, stagesRes, activitiesRes, tasksRes] = await Promise.all([
         supabase.from('crm_contacts').select('id, created_at, stage_id', { count: 'exact' }).limit(1000),
@@ -121,9 +119,11 @@ export function CRMDashboard({ universities: _universities }: CRMDashboardProps)
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4'];
+  useEffect(() => {
+    void fetchDashboardData();
+  }, [fetchDashboardData]);
 
   if (loading) {
     return (

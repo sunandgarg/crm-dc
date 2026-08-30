@@ -5,7 +5,7 @@ import { prisma } from '../db.js';
 import { asyncRoute, HttpError } from '../http.js';
 import { requireAuth } from '../middleware/auth.js';
 import { config } from '../config.js';
-import { createDownloadUrl, createUploadUrl } from '../services/storage.js';
+import { createDownloadUrl, createUploadUrl, inspectObject } from '../services/storage.js';
 
 const uploadSchema = z.object({
   fileName: z.string().min(1).max(180),
@@ -30,5 +30,15 @@ storageRouter.post('/presign-upload', asyncRoute(async (request, response) => {
 storageRouter.get('/:assetId/download', asyncRoute(async (request, response) => {
   const asset = await prisma.fileAsset.findUnique({ where: { id: String(request.params.assetId) } });
   if (!asset) throw new HttpError(404, 'File not found');
+  if (asset.owner_id !== request.user!.id && !['admin', 'super_admin'].includes(request.user!.role)) throw new HttpError(403, 'File access denied');
   response.json({ downloadUrl: await createDownloadUrl(asset.object_key), expiresIn: 600 });
+}));
+
+storageRouter.post('/:assetId/complete', asyncRoute(async (request, response) => {
+  const asset = await prisma.fileAsset.findUnique({ where: { id: String(request.params.assetId) } });
+  if (!asset) throw new HttpError(404, 'File not found');
+  if (asset.owner_id !== request.user!.id && !['admin', 'super_admin'].includes(request.user!.role)) throw new HttpError(403, 'File access denied');
+  const object = await inspectObject(asset.object_key);
+  if (asset.size_bytes !== null && object.sizeBytes !== null && asset.size_bytes !== BigInt(object.sizeBytes)) throw new HttpError(409, 'Uploaded file size does not match the presigned request');
+  response.json({ assetId: asset.id, status: 'available', ...object });
 }));

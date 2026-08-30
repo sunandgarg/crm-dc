@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -46,11 +46,7 @@ export function LeadActivityTimeline({ contactId }: LeadActivityTimelineProps) {
   const [loading, setLoading] = useState(true);
   const [typeFilter, setTypeFilter] = useState<string>('all');
 
-  useEffect(() => {
-    fetchActivities();
-  }, [contactId]);
-
-  const fetchActivities = async () => {
+  const fetchActivities = useCallback(async () => {
     try {
       const { data, error } = await supabase
         .from('crm_activities')
@@ -65,7 +61,11 @@ export function LeadActivityTimeline({ contactId }: LeadActivityTimelineProps) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [contactId]);
+
+  useEffect(() => {
+    void fetchActivities();
+  }, [fetchActivities]);
 
   const getActivityIcon = (type: string) => {
     switch (type) {

@@ -32,6 +32,7 @@ The seeded administrator uses `BOOTSTRAP_ADMIN_EMAIL`. The included university i
 ```sh
 pnpm test
 pnpm build
+pnpm check
 pnpm db:migrate
 pnpm db:seed
 pnpm db:studio
@@ -42,6 +43,8 @@ pnpm db:studio
 Deploy `Dockerfile.api` to a Node container service with PostgreSQL, AWS credentials, SES sender identity, and S3/R2 variables. Deploy `Dockerfile.web` or the Vite `dist` directory to Cloudflare Pages, setting `VITE_API_URL` to the public API origin. Run `pnpm db:migrate` during API release.
 
 Production must use strong values for `JWT_SECRET`, `INBOUND_API_KEY`, and `WEBHOOK_SECRET`. Keep partner secrets, AWS credentials, the Supabase service role key, and database credentials out of `VITE_*` variables.
+
+The API includes an in-process scheduler for due lead batches, a local rules-based AI engine, provider-specific webhook verification, and integration readiness reporting. An administrator can invoke `integration-readiness` from the compatibility client or call `POST /api/functions/integration-readiness` with a bearer token. See [production activation](docs/PRODUCTION_ACTIVATION.md) for provider-side setup that cannot be committed to source control.
 
 ## Migration
 

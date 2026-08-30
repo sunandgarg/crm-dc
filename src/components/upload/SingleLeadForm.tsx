@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import { X, Send, User, Mail, Phone, MapPin, BookOpen, Tag, Loader2, CheckCircle2, XCircle, AlertTriangle, Settings2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { columnMappingToPayloadFields } from '@/components/universities/PayloadFieldsEditor';
@@ -105,7 +105,7 @@ export function SingleLeadForm({ university, onClose, onSuccess }: SingleLeadFor
   }, [payloadFields]);
 
   // Initialize form data with all required fields
-  const getInitialFormData = () => {
+  const getInitialFormData = useCallback(() => {
     const initial: Record<string, string> = {
       name: '',
       email: '',
@@ -130,7 +130,7 @@ export function SingleLeadForm({ university, onClose, onSuccess }: SingleLeadFor
     });
 
     return initial;
-  };
+  }, [customInputFields, university.source, university.medium, university.campaign, university.customColumns]);
 
   const [formData, setFormData] = useState<Record<string, string>>(getInitialFormData);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -141,7 +141,7 @@ export function SingleLeadForm({ university, onClose, onSuccess }: SingleLeadFor
   // Update form when university changes
   useEffect(() => {
     setFormData(getInitialFormData());
-  }, [university.id]);
+  }, [getInitialFormData]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;

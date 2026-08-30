@@ -1,17 +1,18 @@
-import { memo, useMemo, useEffect } from 'react';
+import { lazy, memo, Suspense, useMemo, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { CRMModuleHub } from './CRMModuleHub';
-import { LeadManagementModule } from './modules/LeadManagementModule';
-import { MarketingAutomationModule } from './modules/MarketingAutomationModule';
-import { WorkflowAutomationModule } from './modules/WorkflowAutomationModule';
-import { ApplicationManagementModule } from './modules/ApplicationManagementModule';
-import { AIFeaturesModule } from './modules/AIFeaturesModule';
-import { AnalyticsReportingModule } from './modules/AnalyticsReportingModule';
-import { PaymentBillingModule } from './modules/PaymentBillingModule';
-import { OmnichannelCampaignHub } from './modules/OmnichannelCampaignHub';
-import { CRMConfigSettings } from './modules/CRMConfigSettings';
-import { FunnelCampaignModule } from './funnel/FunnelCampaignModule';
 import { appCache } from '@/hooks/useAppCache';
+
+const CRMModuleHub = lazy(() => import('./CRMModuleHub').then((module) => ({ default: module.CRMModuleHub })));
+const LeadManagementModule = lazy(() => import('./modules/LeadManagementModule').then((module) => ({ default: module.LeadManagementModule })));
+const MarketingAutomationModule = lazy(() => import('./modules/MarketingAutomationModule').then((module) => ({ default: module.MarketingAutomationModule })));
+const WorkflowAutomationModule = lazy(() => import('./modules/WorkflowAutomationModule').then((module) => ({ default: module.WorkflowAutomationModule })));
+const ApplicationManagementModule = lazy(() => import('./modules/ApplicationManagementModule').then((module) => ({ default: module.ApplicationManagementModule })));
+const AIFeaturesModule = lazy(() => import('./modules/AIFeaturesModule').then((module) => ({ default: module.AIFeaturesModule })));
+const AnalyticsReportingModule = lazy(() => import('./modules/AnalyticsReportingModule').then((module) => ({ default: module.AnalyticsReportingModule })));
+const PaymentBillingModule = lazy(() => import('./modules/PaymentBillingModule').then((module) => ({ default: module.PaymentBillingModule })));
+const OmnichannelCampaignHub = lazy(() => import('./modules/OmnichannelCampaignHub').then((module) => ({ default: module.OmnichannelCampaignHub })));
+const CRMConfigSettings = lazy(() => import('./modules/CRMConfigSettings').then((module) => ({ default: module.CRMConfigSettings })));
+const FunnelCampaignModule = lazy(() => import('./funnel/FunnelCampaignModule').then((module) => ({ default: module.FunnelCampaignModule })));
 
 interface CRMModuleProps {
   universities: any[];
@@ -40,31 +41,43 @@ export function CRMModule({ universities }: CRMModuleProps) {
     }
   }, [activeModule]);
 
+  let module: React.ReactNode;
   switch (activeModule) {
     case 'lead-management':
-      return <LeadManagementModule universities={universities} />;
+      module = <LeadManagementModule universities={universities} />;
+      break;
     case 'marketing-automation':
-      return <MarketingAutomationModule />;
+      module = <MarketingAutomationModule />;
+      break;
     case 'workflow-automation':
-      return <WorkflowAutomationModule />;
+      module = <WorkflowAutomationModule />;
+      break;
     case 'application-management':
-      return <ApplicationManagementModule />;
+      module = <ApplicationManagementModule />;
+      break;
     case 'ai-features':
-      return <AIFeaturesModule />;
+      module = <AIFeaturesModule />;
+      break;
     case 'analytics-reporting':
-      return <AnalyticsReportingModule />;
+      module = <AnalyticsReportingModule />;
+      break;
     case 'payment-billing':
-      return <PaymentBillingModule />;
+      module = <PaymentBillingModule />;
+      break;
     case 'omnichannel':
-      return <OmnichannelCampaignHub />;
+      module = <OmnichannelCampaignHub />;
+      break;
     case 'funnel-campaigns':
-      return <FunnelCampaignModule />;
+      module = <FunnelCampaignModule />;
+      break;
     case 'crm-settings':
-      return <CRMConfigSettings />;
+      module = <CRMConfigSettings />;
+      break;
     case 'hub':
     default:
-      return <CRMModuleHub universities={universities} />;
+      module = <CRMModuleHub universities={universities} />;
   }
+  return <Suspense fallback={<div className="flex min-h-[45vh] items-center justify-center"><div className="h-7 w-7 animate-spin rounded-full border-4 border-primary border-t-transparent" /></div>}>{module}</Suspense>;
 }
 
 export default memo(CRMModule);

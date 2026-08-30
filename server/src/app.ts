@@ -17,9 +17,22 @@ export const app = express();
 app.disable("x-powered-by");
 app.use(helmet({ crossOriginResourcePolicy: { policy: "cross-origin" } }));
 app.use(cors({ origin: config.APP_URL.split(",").map((value) => value.trim()), credentials: true }));
-app.use(express.json({ limit: "20mb" }));
+app.use(express.json({
+  limit: "20mb",
+  verify: (request, _response, buffer) => {
+    (request as express.Request & { rawBody?: Buffer }).rawBody = Buffer.from(buffer);
+  },
+}));
 app.use(pinoHttp({ logger }));
 app.get("/api/health", (_request, response) => response.json({ status: "ok", service: "crm-dc-api", timestamp: new Date().toISOString() }));
+app.get("/api/readiness", async (_request, response) => {
+  try {
+    await import("./db.js").then(({ prisma }) => prisma.$queryRaw`SELECT 1`);
+    response.json({ status: "ready", database: "connected", timestamp: new Date().toISOString() });
+  } catch {
+    response.status(503).json({ status: "not-ready", database: "unavailable", timestamp: new Date().toISOString() });
+  }
+});
 app.use("/api/auth", authRouter);
 app.use("/api/functions", publicFunctionsRouter);
 app.use("/api/data", dataRouter);

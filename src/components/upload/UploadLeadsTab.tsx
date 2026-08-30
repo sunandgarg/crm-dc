@@ -637,7 +637,7 @@ export function UploadLeadsTab({
   }, [persistence]);
 
   useEffect(() => {
-    persistence.setProcessing({
+    persistenceRef.current.setProcessing({
       isProcessing,
       isPaused,
       currentIndex: currentIndexRef.current,
@@ -659,7 +659,7 @@ export function UploadLeadsTab({
       lastUrlProcessingStateRef.current = slugState;
       onProcessingStateChange(slugState);
     }
-  }, [isProcessing, isPaused, startTime, batchId, leads.length, processedCount]);
+  }, [isProcessing, isPaused, startTime, batchId, leads.length, processedCount, onProcessingStateChange]);
 
   // ========== POLLING: Real-time batch & lead status sync from DB ==========
   // Uses refs to avoid stale closures - this function is stable and never recreated
@@ -759,7 +759,7 @@ export function UploadLeadsTab({
         }
       }
     }
-  }, [safeUniversities, persistedState.selectedUniversityId]);
+  }, [safeUniversities, persistedState.selectedUniversityId, selectedUniversity, onSelectUniversity]);
 
   const setLeads = useCallback(
     (newLeads: Lead[]) => {
@@ -1547,8 +1547,7 @@ export function UploadLeadsTab({
   };
 
   // ✅ FIX 4: Accept mappingOverride so the "Apply" button passes localColumnMapping directly
-  const applyColumnMappingAndProcess = useCallback(
-    (mappingOverride?: Record<string, string>) => {
+  const applyColumnMappingAndProcess = (mappingOverride?: Record<string, string>) => {
       const rawData = (window as any).__pendingCsvData;
       if (!rawData || !selectedUniversity) {
         setShowColumnMapping(false);
@@ -1682,26 +1681,11 @@ export function UploadLeadsTab({
           message: error instanceof Error ? error.message : "The column mapping could not be applied. Please upload the CSV again.",
         });
       }
-    },
-    [
-      selectedUniversity,
-      tempColumnMapping,
-      buildMappedPayloadPreview,
-      setLeadPayloads,
-      setValidationErrors,
-      setLeads,
-      setLeadStatuses,
-      setLeadResponses,
-      setDbDuplicates,
-      setProcessedCount,
-      setTempColumnMapping,
-      normalizeUpgradLead,
-    ],
-  );
+    };
 
   useEffect(() => {
     applyColumnMappingAndProcessRef.current = applyColumnMappingAndProcess;
-  }, [applyColumnMappingAndProcess]);
+  });
 
   const checkDbDuplicates = async () => {
     if (!selectedUniversity || leads.length === 0) return;
@@ -2098,7 +2082,7 @@ export function UploadLeadsTab({
     };
   };
 
-  const processLeads = useCallback(async () => {
+  const processLeads = async () => {
     if (!selectedUniversity || leads.length === 0) return;
 
     if (!sourceLabel.trim()) {
@@ -2119,7 +2103,7 @@ export function UploadLeadsTab({
       message: `Queuing ${leads.length} leads for background processing...`,
     });
     await startBackgroundProcessing();
-  }, [selectedUniversity, leads, startBackgroundProcessing, sourceLabel]);
+  };
 
   const pauseProcessing = async () => {
     pausedRef.current = true;

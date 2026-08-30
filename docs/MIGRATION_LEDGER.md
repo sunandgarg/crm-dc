@@ -17,6 +17,12 @@ Updated: 30 August 2026
 - Admin user approval, role, permission, revocation, and user creation workflows adapted to OTP authentication.
 - CRM merge: saved views, favourites, lead drawer, editable stage/priority/owner, activity timeline/composer, CSV import/export, bulk assignment/stage change, table and Kanban.
 - Seed dataset, Docker local infrastructure, production Dockerfiles, CI, unit tests, migration utility, and archived Supabase source.
+- In-process scheduled-batch runner with atomic claims, full-batch paging, failure state, and graceful shutdown.
+- Functional local AI scoring, call analysis, email generation, and enrollment prediction, with opt-in OpenAI-compatible enrichment.
+- Provider-specific webhook verification: Meta raw-body HMAC, Google/Netcore bearer or secret headers, and fail-closed production behavior.
+- Integration readiness report, database readiness probe, object upload confirmation, and owner/admin download authorization.
+- Route-driven frontend code splitting; inactive product modules are no longer downloaded, mounted, or queried.
+- Zero-warning lint baseline and 13 backend unit tests.
 
 ## Compatibility Bridge
 
@@ -27,14 +33,15 @@ The API allowlist is explicit. Unknown resources fail with `404`; unknown legacy
 ## Requires Deployment Input
 
 - Real Supabase/customer data was not copied. Run the provided migration utility only with authorization and inspect its per-resource ledger.
-- AWS SES needs a verified sender/domain, production access, region, and IAM permission.
-- S3/R2 needs a bucket, CORS policy, lifecycle rules, and scoped credentials. MinIO is local-only.
-- Meta/Google/Netcore webhook subscriptions and signatures must be configured in each provider account.
+- AWS SES needs a verified sender/domain, production access, region, and IAM permission. Application support is complete.
+- S3/R2 needs a bucket and scoped credentials. Versioned CORS and lifecycle examples are under `infra/storage`; MinIO is local-only.
+- Meta/Google/Netcore webhook subscriptions and secrets must be entered in each provider account. Verification code and callback routes are complete.
 - Stable outbound partner allowlisting requires fixed egress infrastructure; an Express request IP is not an egress guarantee.
-- AI features return explicit `501` until a model provider, privacy policy, budget, and API credential are selected.
+- External AI enrichment is optional and requires an API URL, model, credential, privacy approval, and budget. The default local rules engine is fully functional and sends no lead data externally.
 - Existing Supabase Auth password hashes cannot be exported. Users sign in through OTP; provision the approved user list through admin or an authorized identity export.
-- Production scheduling needs a cron/queue trigger for `process-scheduled-batches`; the endpoint is implemented but no cloud scheduler was created.
 - Provider acceptance testing must use partner-approved sandbox endpoints. The seed partner URL and secrets are intentionally placeholders.
+
+Provider-side steps are documented in [production activation](PRODUCTION_ACTIVATION.md). They cannot be marked complete until the account owner supplies credentials and confirms each provider dashboard.
 
 ## Cutover Gate
 

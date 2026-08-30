@@ -354,7 +354,7 @@ export function MultiPushView({ universities }: MultiPushViewProps) {
       title: 'Multi-Push complete',
       description: `${collected.filter((r) => r.status === 'success').length}/${collected.length} succeeded in ${elapsedSec}s`,
     });
-  }, [leads, selectedUniversities, defaultsMap, fileName, totalPushes, toast, uiBatchEnabled, uiBatchSize]);
+  }, [leads, selectedUniversities, defaultsMap, fileName, toast, uiBatchEnabled, uiBatchSize]);
 
 
   return (

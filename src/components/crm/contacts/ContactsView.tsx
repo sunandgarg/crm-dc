@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -95,11 +95,7 @@ export function ContactsView({ universities }: ContactsViewProps) {
 
   const [totalCount, setTotalCount] = useState(0);
 
-  useEffect(() => {
-    fetchData();
-  }, [page, stageFilter, universityFilter, searchTerm]);
-
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     setLoading(true);
     try {
       // Fetch stages once
@@ -133,7 +129,11 @@ export function ContactsView({ universities }: ContactsViewProps) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [page, stageFilter, universityFilter, searchTerm]);
+
+  useEffect(() => {
+    void fetchData();
+  }, [fetchData]);
 
   // Server-side pagination - contacts are already filtered & paginated
   const paginatedContacts = contacts;

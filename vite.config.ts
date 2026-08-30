@@ -1,4 +1,4 @@
-import { defineConfig } from "vite";
+import { defineConfig } from "vitest/config";
 import react from "@vitejs/plugin-react-swc";
 import path from "path";
 
@@ -8,6 +8,13 @@ export default defineConfig(() => ({
     port: 8080,
   },
   plugins: [react()],
+  test: {
+    env: {
+      DATABASE_URL: "postgresql://crm:crm@localhost:5432/crm_dc",
+      JWT_SECRET: "test-secret-that-is-at-least-thirty-two-characters",
+      NODE_ENV: "test",
+    },
+  },
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),

@@ -82,7 +82,7 @@ export function usePermissions() {
     } finally {
       setLoading(false);
     }
-  }, [user?.id, isAdmin]);
+  }, [user, isAdmin]);
 
   useEffect(() => {
     fetchPermissions();

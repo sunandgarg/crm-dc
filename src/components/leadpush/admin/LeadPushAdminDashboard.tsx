@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   ArrowLeft, RefreshCw, CheckCircle2, XCircle, Copy, AlertTriangle,
@@ -140,7 +140,7 @@ export default function LeadPushAdminDashboard() {
     setDetailLoading(false);
   };
 
-  const load = async (rk: RangeKey = range, cf = customFrom, ct = customTo) => {
+  const load = useCallback(async (rk: RangeKey = range, cf = customFrom, ct = customTo) => {
     setLoading(true);
     const { from, to } = rangeToDates(rk, cf, ct);
     let dailyQ = supabase.from("lead_push_daily_stats").select("*");
@@ -158,9 +158,9 @@ export default function LeadPushAdminDashboard() {
     setUniversities(nextU); setDaily(nextD); setCumulative(nextC); setFetchedAt(stamp);
     writeCache({ universities: nextU, daily: nextD, cumulative: nextC, fetchedAt: stamp });
     setLoading(false);
-  };
+  }, [range, customFrom, customTo]);
 
-  useEffect(() => { if (!cached) load(); }, []);
+  useEffect(() => { if (!cached) void load(); }, [cached, load]);
 
   const onRangeChange = (rk: RangeKey) => {
     setRange(rk);

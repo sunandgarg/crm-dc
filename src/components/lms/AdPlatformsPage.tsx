@@ -536,7 +536,7 @@ export function AdPlatformsPage() {
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="text-sm text-muted-foreground w-24 shrink-0">Verify Token :</span>
-                  <code className="text-sm font-mono">Set as META_VERIFY_TOKEN in Supabase secrets</code>
+                  <code className="text-sm font-mono">Set as META_VERIFY_TOKEN in the API environment</code>
                 </div>
               </div>
             </Card>

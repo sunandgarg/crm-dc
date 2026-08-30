@@ -1,33 +1,35 @@
-import { useState, useEffect, useCallback, useMemo, useRef, memo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef, lazy, Suspense } from 'react';
 import { Button } from '@/components/ui/button';
 import { useNavigate, useLocation, useParams } from 'react-router-dom';
 import { Header } from '@/components/Header';
 import { TabNavigation } from '@/components/TabNavigation';
-import { SettingsTab } from '@/components/settings/SettingsTab';
-import { DashboardTab } from '@/components/dashboard/DashboardTab';
-import { AddUniversityModal, UniversityFormData } from '@/components/universities/AddUniversityModal';
-import { EditUniversityModal, UniversityEditData } from '@/components/universities/EditUniversityModal';
-import { CRMModule } from '@/components/crm/CRMModule';
-import { LeadPushModule } from '@/components/leadpush/LeadPushModule';
-import { UrlShortenerModule } from '@/components/urlshortener/UrlShortenerModule';
-import { AllLeadsPage } from '@/components/lms/AllLeadsPage';
-import { ApiConnectionsPage } from '@/components/lms/ApiConnectionsPage';
-import { AdPlatformsPage } from '@/components/lms/AdPlatformsPage';
-import { AutomationRulesPage } from '@/components/lms/AutomationRulesPage';
-import { TelecallerManagement } from '@/components/telecaller/TelecallerManagement';
+import type { UniversityFormData } from '@/components/universities/AddUniversityModal';
+import type { UniversityEditData } from '@/components/universities/EditUniversityModal';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
 import { useAdminAuth } from '@/hooks/useAdminAuth';
 import { appCache } from '@/hooks/useAppCache';
 import { LogOut } from 'lucide-react';
-import UniversityTracker from '@/components/admin/UniversityTracker';
+const SettingsTab = lazy(() => import('@/components/settings/SettingsTab').then((module) => ({ default: module.SettingsTab })));
+const DashboardTab = lazy(() => import('@/components/dashboard/DashboardTab').then((module) => ({ default: module.DashboardTab })));
+const AddUniversityModal = lazy(() => import('@/components/universities/AddUniversityModal').then((module) => ({ default: module.AddUniversityModal })));
+const EditUniversityModal = lazy(() => import('@/components/universities/EditUniversityModal').then((module) => ({ default: module.EditUniversityModal })));
+const CRMModule = lazy(() => import('@/components/crm/CRMModule').then((module) => ({ default: module.CRMModule })));
+const LeadPushModule = lazy(() => import('@/components/leadpush/LeadPushModule').then((module) => ({ default: module.LeadPushModule })));
+const UrlShortenerModule = lazy(() => import('@/components/urlshortener/UrlShortenerModule').then((module) => ({ default: module.UrlShortenerModule })));
+const AllLeadsPage = lazy(() => import('@/components/lms/AllLeadsPage').then((module) => ({ default: module.AllLeadsPage })));
+const ApiConnectionsPage = lazy(() => import('@/components/lms/ApiConnectionsPage').then((module) => ({ default: module.ApiConnectionsPage })));
+const AdPlatformsPage = lazy(() => import('@/components/lms/AdPlatformsPage').then((module) => ({ default: module.AdPlatformsPage })));
+const AutomationRulesPage = lazy(() => import('@/components/lms/AutomationRulesPage').then((module) => ({ default: module.AutomationRulesPage })));
+const TelecallerManagement = lazy(() => import('@/components/telecaller/TelecallerManagement').then((module) => ({ default: module.TelecallerManagement })));
+const UniversityTracker = lazy(() => import('@/components/admin/UniversityTracker'));
 
-// Memoize heavy components to prevent re-renders
-const MemoizedCRMModule = memo(CRMModule);
-const MemoizedDashboardTab = memo(DashboardTab);
-const MemoizedLeadPushModule = memo(LeadPushModule);
-const MemoizedUrlShortenerModule = memo(UrlShortenerModule);
+const ModuleFallback = () => (
+  <div className="flex min-h-[50vh] items-center justify-center" aria-label="Loading module">
+    <div className="h-7 w-7 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+  </div>
+);
 
 // Utility to create URL-safe slug from name
 const toSlug = (name: string): string => {
@@ -361,15 +363,15 @@ const Index = () => {
           await withTimeout(
             fetchUniversities(),
             INITIAL_LOAD_TIMEOUT_MS,
-            'Supabase did not respond within 15 seconds.',
+            'The CRM API did not respond within 15 seconds.',
           );
         }
       } catch (error) {
         console.error('Initial data load failed:', error);
-        setStartupError(error instanceof Error ? error.message : 'Could not load data from Supabase.');
+        setStartupError(error instanceof Error ? error.message : 'Could not load data from the CRM API.');
       } finally {
         // Never leave the whole application behind an infinite loading screen.
-        // Users can still navigate and retry if Supabase or the network is unavailable.
+        // Users can still navigate and retry if the API or network is unavailable.
         setLoading(false);
       }
     };
@@ -383,11 +385,11 @@ const Index = () => {
       await withTimeout(
         fetchUniversities(),
         INITIAL_LOAD_TIMEOUT_MS,
-        'Supabase did not respond within 15 seconds.',
+        'The CRM API did not respond within 15 seconds.',
       );
     } catch (error) {
       console.error('Data reload failed:', error);
-      setStartupError(error instanceof Error ? error.message : 'Could not load data from Supabase.');
+      setStartupError(error instanceof Error ? error.message : 'Could not load data from the CRM API.');
     }
   }, [fetchUniversities]);
 
@@ -820,7 +822,7 @@ const Index = () => {
 
       {startupError && (
         <div className="mx-4 mt-4 flex flex-col gap-3 rounded-lg border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive sm:flex-row sm:items-center sm:justify-between">
-          <span>Could not load Supabase data: {startupError}</span>
+          <span>Could not load CRM data: {startupError}</span>
           <Button variant="outline" size="sm" onClick={retryInitialLoad}>
             Retry
           </Button>
@@ -828,24 +830,25 @@ const Index = () => {
       )}
 
       <main className="pb-16">
+        <Suspense fallback={<ModuleFallback />}>
         {/* All Leads */}
-        {isAdmin && <div className={activeTab === 'all-leads' ? '' : 'hidden'}>
+        {isAdmin && activeTab === 'all-leads' && <div>
           <AllLeadsPage />
         </div>}
 
         {/* Dashboard */}
-        {isAdmin && <div className={activeTab === 'dashboard' ? '' : 'hidden'}>
-          <MemoizedDashboardTab />
+        {isAdmin && activeTab === 'dashboard' && <div>
+          <DashboardTab />
         </div>}
 
         {/* CRM (includes Marketing) */}
-        {isAdmin && <div className={activeTab === 'crm' ? '' : 'hidden'}>
-          <MemoizedCRMModule universities={universities} />
+        {isAdmin && activeTab === 'crm' && <div>
+          <CRMModule universities={universities} />
         </div>}
 
         {/* Lead Push (Universities, Upload, History, Logs) */}
-        <div className={activeTab === 'lead-push' ? '' : 'hidden'}>
-          <MemoizedLeadPushModule
+        {activeTab === 'lead-push' && <div>
+          <LeadPushModule
             universities={universities}
             logs={logs}
             batches={batches}
@@ -858,10 +861,10 @@ const Index = () => {
             selectedUploadUniversity={selectedUploadUniversity}
             onBulkImport={handleBulkImport}
           />
-        </div>
+        </div>}
 
         {/* Connections - API Keys */}
-        {isAdmin && <div className={activeTab === 'connections' ? '' : 'hidden'}>
+        {isAdmin && activeTab === 'connections' && <div>
           <div className="container mx-auto px-4 pt-4">
             <div className="flex gap-2 mb-4">
               <Button
@@ -884,31 +887,31 @@ const Index = () => {
         </div>}
 
         {/* Automation */}
-        {isAdmin && <div className={activeTab === 'automation' ? '' : 'hidden'}>
+        {isAdmin && activeTab === 'automation' && <div>
           <AutomationRulesPage />
         </div>}
 
         {/* URL Shortener */}
-        {isAdmin && <div className={activeTab === 'url-shortener' ? '' : 'hidden'}>
-          <MemoizedUrlShortenerModule />
+        {isAdmin && activeTab === 'url-shortener' && <div>
+          <UrlShortenerModule />
         </div>}
 
         {/* University Tracker (Admin Only) */}
-        {isAdmin && (
-          <div className={activeTab === 'uni-tracker' ? '' : 'hidden'}>
+        {isAdmin && activeTab === 'uni-tracker' && (
+          <div>
             <UniversityTracker />
           </div>
         )}
 
         {/* Telecaller Management */}
-        {isAdmin && <div className={activeTab === 'telecaller-mgmt' ? '' : 'hidden'}>
+        {isAdmin && activeTab === 'telecaller-mgmt' && <div>
           <div className="container mx-auto px-4 pt-4">
             <TelecallerManagement />
           </div>
         </div>}
 
         {/* Settings */}
-        {isAdmin && <div className={activeTab === 'settings' ? '' : 'hidden'}>
+        {isAdmin && activeTab === 'settings' && <div>
           <SettingsTab
             defaultLeadsPerMinute={5}
             onSaveSettings={() => toast({ title: 'Settings saved!' })}
@@ -917,21 +920,22 @@ const Index = () => {
             }}
           />
         </div>}
+        </Suspense>
       </main>
 
       {/* Modals */}
-      <AddUniversityModal
+      {isModalOpen && <Suspense fallback={null}><AddUniversityModal
         isOpen={isModalOpen}
         onClose={closeAddModal}
         onSave={handleAddUniversity}
-      />
+      /></Suspense>}
 
-      <EditUniversityModal
+      {isEditModalOpen && <Suspense fallback={null}><EditUniversityModal
         isOpen={isEditModalOpen}
         university={editingUniversity}
         onClose={closeEditModal}
         onSave={handleSaveEdit}
-      />
+      /></Suspense>}
     </div>
   );
 };
