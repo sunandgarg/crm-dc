@@ -1,196 +1,91 @@
-import { useState, useEffect, useCallback } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
-import { supabase } from '@/integrations/supabase/client';
-import { Mail, Lock, LogIn, Loader2, AlertCircle, RefreshCw } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { AlertCircle, ArrowLeft, KeyRound, Loader2, LogIn, Mail, RefreshCw } from 'lucide-react';
 import logo from '@/assets/logo.png';
+import { supabase } from '@/integrations/supabase/client';
 
-const Auth = () => {
+export default function Auth() {
   const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [code, setCode] = useState('');
+  const [step, setStep] = useState<'email' | 'code'>('email');
   const [loading, setLoading] = useState(false);
   const [checkingSession, setCheckingSession] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [developmentCode, setDevelopmentCode] = useState<string | null>(null);
   const navigate = useNavigate();
   const location = useLocation();
-
   const from = (location.state as { from?: { pathname: string } })?.from?.pathname || '/';
 
   const checkExistingSession = useCallback(async () => {
-    try {
-      const { data: { session }, error } = await supabase.auth.getSession();
-      if (error) {
-        console.error('Session check error:', error);
-      }
-      if (session?.user) {
-        navigate(from, { replace: true });
-      }
-    } catch (err) {
-      console.error('Session check failed:', err);
-    } finally {
-      setCheckingSession(false);
-    }
-  }, [navigate, from]);
+    const { data } = await supabase.auth.getSession();
+    if (data.session?.user) navigate(from, { replace: true });
+    setCheckingSession(false);
+  }, [from, navigate]);
 
   useEffect(() => {
-    let mounted = true;
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event: string, session: any) => {
+      if (session?.user) navigate(from, { replace: true });
+      setCheckingSession(false);
+    });
+    void checkExistingSession();
+    return () => subscription.unsubscribe();
+  }, [checkExistingSession, from, navigate]);
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (event, session) => {
-        if (!mounted) return;
-        if (session?.user) {
-          navigate(from, { replace: true });
-        }
-        setCheckingSession(false);
-      }
-    );
-
-    checkExistingSession();
-
-    return () => {
-      mounted = false;
-      subscription.unsubscribe();
-    };
-  }, [navigate, from, checkExistingSession]);
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const requestCode = async (event: React.FormEvent) => {
+    event.preventDefault();
     setError(null);
-    
-    if (!email?.trim()) { setError('Please enter your email address'); return; }
-    if (!password) { setError('Please enter your password'); return; }
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) { setError('Please enter a valid email address'); return; }
-    if (password.length < 6) { setError('Password must be at least 6 characters'); return; }
-
+    const normalized = email.trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized)) return setError('Enter a valid email address');
     setLoading(true);
-    try {
-      const { error: signInError } = await supabase.auth.signInWithPassword({ 
-        email: email.trim().toLowerCase(), 
-        password 
-      });
-      
-      if (signInError) {
-        if (signInError.message.includes('Invalid login credentials')) {
-          setError('Invalid email or password. Please try again.');
-        } else if (signInError.message.includes('rate limit')) {
-          setError('Too many login attempts. Please try again later.');
-        } else if (signInError.message.includes('Email not confirmed')) {
-          setError('Your account is not active yet. Please contact admin.');
-        } else {
-          setError(signInError.message);
-        }
-      }
-    } catch {
-      setError('An unexpected error occurred. Please try again.');
-    } finally {
-      setLoading(false);
-    }
+    const { data, error: requestError } = await supabase.auth.requestOtp({ email: normalized });
+    setLoading(false);
+    if (requestError) return setError(requestError.message || 'Could not send the verification code');
+    setEmail(normalized);
+    setDevelopmentCode(data?.developmentCode || null);
+    setStep('code');
   };
 
-  const handleRetry = () => {
+  const verifyCode = async (event: React.FormEvent) => {
+    event.preventDefault();
     setError(null);
-    setCheckingSession(true);
-    checkExistingSession();
+    if (!/^\d{6}$/.test(code)) return setError('Enter the 6-digit verification code');
+    setLoading(true);
+    const { error: verifyError } = await supabase.auth.verifyOtp({ email, token: code, type: 'email' });
+    setLoading(false);
+    if (verifyError) setError(verifyError.message || 'Invalid or expired verification code');
   };
 
-  if (checkingSession) {
-    return (
-      <div className="min-h-screen bg-background flex flex-col items-center justify-center gap-4">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-        <p className="text-sm text-muted-foreground">Loading...</p>
-      </div>
-    );
-  }
+  if (checkingSession) return <div className="min-h-screen bg-background flex flex-col items-center justify-center gap-4"><Loader2 className="h-8 w-8 animate-spin text-primary" /><p className="text-sm text-muted-foreground">Checking your session...</p></div>;
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
       <div className="w-full max-w-md">
         <div className="card-elevated p-8">
-          <div className="text-center mb-8">
-            <div className="flex items-center justify-center">
-              <img src={logo} alt="Logo" className="h-16 w-auto" />
-            </div>
+          <div className="mb-8 flex justify-center"><img src={logo} alt="DekhoCampus" className="h-16 w-auto" /></div>
+          <div className="mb-6">
+            <h1 className="text-xl font-semibold text-foreground">{step === 'email' ? 'Sign in to CRM' : 'Check your email'}</h1>
+            <p className="mt-1 text-sm text-muted-foreground">{step === 'email' ? 'A secure verification code will be sent by email.' : `Enter the code sent to ${email}.`}</p>
           </div>
 
-          {error && (
-            <div className="mb-6 p-4 bg-destructive/10 border border-destructive/20 rounded-lg flex items-start gap-3">
-              <AlertCircle className="h-5 w-5 text-destructive flex-shrink-0 mt-0.5" />
-              <div className="flex-1">
-                <p className="text-sm text-destructive">{error}</p>
-              </div>
-              <button type="button" onClick={() => setError(null)} className="text-destructive hover:text-destructive/80">×</button>
-            </div>
+          {error && <div className="mb-5 flex items-start gap-3 rounded-md border border-destructive/20 bg-destructive/10 p-3"><AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-destructive" /><p className="flex-1 text-sm text-destructive">{error}</p><button type="button" onClick={() => setError(null)} aria-label="Dismiss error" className="text-destructive">x</button></div>}
+
+          {developmentCode && <div className="mb-5 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">Development code: <strong className="font-mono">{developmentCode}</strong></div>}
+
+          {step === 'email' ? (
+            <form onSubmit={requestCode} className="space-y-5">
+              <div><label className="mb-2 block text-sm font-medium text-foreground">Work email</label><div className="relative"><Mail className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground" /><input type="email" value={email} onChange={(event) => setEmail(event.target.value)} className="input-field pl-11" placeholder="you@company.com" autoComplete="email" disabled={loading} autoFocus /></div></div>
+              <button type="submit" disabled={loading} className="btn-primary flex w-full items-center justify-center gap-2">{loading ? <Loader2 className="h-5 w-5 animate-spin" /> : <><Mail className="h-5 w-5" />Send code</>}</button>
+            </form>
+          ) : (
+            <form onSubmit={verifyCode} className="space-y-5">
+              <div><label className="mb-2 block text-sm font-medium text-foreground">Verification code</label><div className="relative"><KeyRound className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground" /><input value={code} onChange={(event) => setCode(event.target.value.replace(/\D/g, '').slice(0, 6))} inputMode="numeric" autoComplete="one-time-code" className="input-field pl-11 font-mono text-lg" placeholder="000000" disabled={loading} autoFocus /></div></div>
+              <button type="submit" disabled={loading} className="btn-primary flex w-full items-center justify-center gap-2">{loading ? <Loader2 className="h-5 w-5 animate-spin" /> : <><LogIn className="h-5 w-5" />Verify and sign in</>}</button>
+              <div className="flex items-center justify-between"><button type="button" onClick={() => { setStep('email'); setCode(''); setDevelopmentCode(null); }} className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"><ArrowLeft className="h-4 w-4" />Change email</button><button type="button" onClick={(event) => void requestCode(event as any)} className="flex items-center gap-1 text-sm text-primary hover:text-primary/80"><RefreshCw className="h-4 w-4" />Resend</button></div>
+            </form>
           )}
-
-          <form onSubmit={handleSubmit} className="space-y-5">
-                <div>
-                  <label className="block text-sm font-medium text-foreground mb-2">Email</label>
-                  <div className="relative">
-                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-                    <input
-                      type="email"
-                      value={email}
-                      onChange={(e) => { setEmail(e.target.value); setError(null); }}
-                      placeholder="Enter your email"
-                      className="input-field pl-11"
-                      autoComplete="email"
-                      disabled={loading}
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-foreground mb-2">Password</label>
-                  <div className="relative">
-                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-                    <input
-                      type="password"
-                      value={password}
-                      onChange={(e) => { setPassword(e.target.value); setError(null); }}
-                      placeholder="Enter your password"
-                      className="input-field pl-11"
-                      autoComplete="current-password"
-                      disabled={loading}
-                    />
-                  </div>
-                </div>
-
-                <button type="submit" disabled={loading} className="btn-primary w-full flex items-center justify-center gap-2">
-                  {loading ? (
-                    <Loader2 className="h-5 w-5 animate-spin" />
-                  ) : (
-                    <>
-                      <LogIn className="h-5 w-5" />
-                      Sign In
-                    </>
-                  )}
-                </button>
-              </form>
-
-              <div className="mt-6 flex flex-col items-center gap-2">
-                <p className="text-sm text-muted-foreground text-center">
-                  Account creation and password changes are handled by admin only.
-                </p>
-              </div>
-
-          <div className="mt-4 text-center">
-            <button
-              type="button"
-              onClick={handleRetry}
-              className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 mx-auto"
-            >
-              <RefreshCw className="h-3 w-3" />
-              Refresh connection
-            </button>
-          </div>
-
-          <p className="text-center text-xs text-muted-foreground mt-4">
-            Contact admin if you need access
-          </p>
+          <p className="mt-6 text-center text-xs text-muted-foreground">Access is limited to approved CRM users.</p>
         </div>
       </div>
     </div>
   );
-};
-
-export default Auth;
+}

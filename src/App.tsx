@@ -6,7 +6,6 @@ import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigationType 
 import { Component, useEffect, useRef, memo, Suspense, lazy, forwardRef, type ReactNode } from "react";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 import { appCache } from "@/hooks/useAppCache";
-import { hasSupabaseConfig, supabaseConfigError } from "@/integrations/supabase/client";
 import { useAdminAuth } from "@/hooks/useAdminAuth";
 import Index from "./pages/Index";
 
@@ -313,30 +312,11 @@ const App = () => (
     <TooltipProvider>
       <Toaster />
       <Sonner />
-      {hasSupabaseConfig ? (
-        <AppErrorBoundary>
-          <BrowserRouter>
-            <AppRoutes />
-          </BrowserRouter>
-        </AppErrorBoundary>
-      ) : (
-        <div className="min-h-screen bg-background flex items-center justify-center p-6">
-          <div className="w-full max-w-2xl rounded-2xl border border-destructive/30 bg-card p-8 shadow-sm">
-            <h1 className="text-2xl font-semibold text-foreground">Supabase configuration missing</h1>
-            <p className="mt-3 text-sm text-muted-foreground">
-              This deployment is missing the environment variables required to start the app.
-            </p>
-            <div className="mt-6 rounded-lg bg-destructive/10 p-4 text-sm text-destructive">
-              {supabaseConfigError}
-            </div>
-            <div className="mt-6 space-y-2 text-sm text-muted-foreground">
-              <p>Add these variables in Cloudflare Pages and redeploy:</p>
-              <p>`VITE_SUPABASE_URL`</p>
-              <p>`VITE_SUPABASE_PUBLISHABLE_KEY`</p>
-            </div>
-          </div>
-        </div>
-      )}
+      <AppErrorBoundary>
+        <BrowserRouter>
+          <AppRoutes />
+        </BrowserRouter>
+      </AppErrorBoundary>
     </TooltipProvider>
   </QueryClientProvider>
 );

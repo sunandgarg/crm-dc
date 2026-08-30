@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
+
+type User = any;
+type Session = any;
 
 interface AuthState {
   user: User | null;

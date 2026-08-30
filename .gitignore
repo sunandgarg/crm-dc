@@ -9,6 +9,11 @@ lerna-debug.log*
 
 node_modules
 dist
+server/dist
+.env
+.env.*
+!.env.example
+coverage
 dist-ssr
 *.local
 supabase/.temp/

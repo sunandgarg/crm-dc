@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { supabase, supabaseProjectUrl } from '@/integrations/supabase/client';
+import { supabase } from '@/integrations/supabase/client';
 import { Loader2, AlertCircle } from 'lucide-react';
 
 const KNOWN_ROUTES = new Set([
@@ -10,11 +10,7 @@ const KNOWN_ROUTES = new Set([
 ]);
 
 /**
- * URL Redirect Fallback Handler
- * 
- * This component is a FALLBACK for the inline script in index.html.
- * The inline script handles 99% of redirects instantly (before React loads).
- * This component handles edge cases: expired/inactive URLs, error states, 404s.
+ * Public short-link resolver backed by the CRM DC API.
  */
 export default function UrlRedirect() {
   const params = useParams<{ code?: string; header?: string; codeOrHeader?: string }>();
@@ -93,10 +89,8 @@ export default function UrlRedirect() {
           return;
         }
 
-        // Track + redirect (the inline script likely already handled this,
-        // but if we're here as fallback, do it again)
         if (mapping.user_tracking !== false) {
-          trackClick(mapping.id);
+          void supabase.functions.invoke('url-redirect', { body: { code } });
         }
         window.location.replace(mapping.original_url);
       } catch (e) {
@@ -124,51 +118,5 @@ export default function UrlRedirect() {
     );
   }
 
-  // Minimal - should rarely be seen since inline script handles redirect
-  return null;
-}
-
-function trackClick(urlId: string) {
-  const ua = navigator.userAgent;
-  const referrer = document.referrer || null;
-  const { browser, os, deviceType } = parseUA(ua);
-
-  const headers: Record<string, string> = {
-    'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-    'Content-Type': 'application/json',
-    'Prefer': 'return=minimal',
-  };
-  const base = supabaseProjectUrl;
-
-  try {
-    fetch(`${base}/rest/v1/url_clicks`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({ url_id: urlId, user_agent: ua, referrer, browser, os, device_type: deviceType }),
-      keepalive: true,
-    });
-    fetch(`${base}/rest/v1/rpc/increment_url_clicks`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({ p_url_id: urlId }),
-      keepalive: true,
-    });
-  } catch { /* non-critical */ }
-}
-
-function parseUA(ua: string) {
-  let browser: string | null = null, os: string | null = null, deviceType = 'desktop';
-  if (ua.includes('Chrome') && !ua.includes('Edg')) browser = 'Chrome';
-  else if (ua.includes('Safari') && !ua.includes('Chrome')) browser = 'Safari';
-  else if (ua.includes('Firefox')) browser = 'Firefox';
-  else if (ua.includes('Edg')) browser = 'Edge';
-  else if (ua.includes('Opera') || ua.includes('OPR')) browser = 'Opera';
-  if (ua.includes('Windows')) os = 'Windows';
-  else if (ua.includes('Mac OS')) os = 'macOS';
-  else if (ua.includes('Linux')) os = 'Linux';
-  else if (ua.includes('Android')) os = 'Android';
-  else if (ua.includes('iPhone') || ua.includes('iPad')) os = 'iOS';
-  if (ua.includes('Mobile') || ua.includes('Android') || ua.includes('iPhone')) deviceType = 'mobile';
-  else if (ua.includes('iPad') || ua.includes('Tablet')) deviceType = 'tablet';
-  return { browser, os, deviceType };
+  return <div className="min-h-screen bg-background flex items-center justify-center"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>;
 }

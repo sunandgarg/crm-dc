@@ -1,4 +1,4 @@
-import { memo, useState, useMemo, useCallback } from 'react';
+import { memo, useState, useMemo, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -14,9 +14,11 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '
 import { DropdownMenu, DropdownMenuContent, DropdownMenuCheckboxItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import {
   ArrowLeft, Plus, Search, Download, Upload, LayoutGrid, List,
-  Phone, Mail, MessageSquare, Star, ChevronDown, SlidersHorizontal, Users, Loader2
+  Phone, Mail, MessageSquare, Star, ChevronDown, SlidersHorizontal, Users, Loader2,
+  Clock3, CalendarClock, UserRoundCog, FileSpreadsheet
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useAuth } from '@/hooks/useAuth';
 
 const SOURCES = ['Google Ads', 'Meta Ads', 'Organic', 'Walk-in', 'Referral', 'Website', 'WhatsApp'];
 
@@ -49,6 +51,7 @@ export function LeadManagementModule({ universities }: LeadManagementModuleProps
   const navigate = useNavigate();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { user } = useAuth();
   const [viewMode, setViewMode] = useState<'table' | 'kanban'>('table');
   const [searchTerm, setSearchTerm] = useState('');
   const [sourceFilter, setSourceFilter] = useState('all');
@@ -56,7 +59,12 @@ export function LeadManagementModule({ universities }: LeadManagementModuleProps
   const [selectedLeads, setSelectedLeads] = useState<Set<string>>(new Set());
   const [visibleColumns, setVisibleColumns] = useState<Set<string>>(new Set(ALL_COLUMNS.filter(c => c.default).map(c => c.key)));
   const [showAddLead, setShowAddLead] = useState(false);
+  const [showLeadDetail, setShowLeadDetail] = useState<string | null>(null);
+  const [savedView, setSavedView] = useState('All Leads');
+  const [activityType, setActivityType] = useState('note');
+  const [activityNote, setActivityNote] = useState('');
   const [draggedLead, setDraggedLead] = useState<string | null>(null);
+  const importRef = useRef<HTMLInputElement>(null);
 
   // New lead form state
   const [newLead, setNewLead] = useState({ name: '', mobile: '', email: '', source: '', course: '', city: '' });
@@ -113,12 +121,35 @@ export function LeadManagementModule({ universities }: LeadManagementModuleProps
     createdAt: c.created_at ? new Date(c.created_at).toLocaleDateString() : '',
     rawCreatedAt: c.created_at || '',
     freshness: getLeadFreshness(c.created_at || new Date().toISOString()),
+    priority: c.priority || 'Medium',
+    favourite: Boolean(c.custom_fields?.favourite),
+    lastContactedAt: c.last_contacted_at || null,
+    nextFollowUp: c.next_follow_up || null,
+    notes: c.notes || '',
+    raw: c,
   })), [contacts]);
 
   const filteredLeads = useMemo(() => leads.filter(l => {
     const matchSearch = l.name.toLowerCase().includes(searchTerm.toLowerCase()) || l.email.toLowerCase().includes(searchTerm.toLowerCase()) || l.mobile.includes(searchTerm);
-    return matchSearch && (sourceFilter === 'all' || l.source === sourceFilter) && (stageFilter === 'all' || l.stage === stageFilter);
-  }), [leads, searchTerm, sourceFilter, stageFilter]);
+    const matchView = savedView === 'All Leads'
+      || (savedView === 'Untouched' && !l.lastContactedAt)
+      || (savedView === 'My Follow-ups' && Boolean(l.nextFollowUp))
+      || (savedView === 'Applications' && l.stage === 'Application')
+      || (savedView === 'Favourites' && l.favourite);
+    return matchSearch && matchView && (sourceFilter === 'all' || l.source === sourceFilter) && (stageFilter === 'all' || l.stage === stageFilter);
+  }), [leads, searchTerm, sourceFilter, stageFilter, savedView]);
+
+  const activeLead = useMemo(() => leads.find(lead => lead.id === showLeadDetail) || null, [leads, showLeadDetail]);
+
+  const { data: activeActivities = [] } = useQuery({
+    queryKey: ['crm-lead-activities', showLeadDetail],
+    enabled: Boolean(showLeadDetail),
+    queryFn: async () => {
+      const { data, error } = await supabase.from('crm_activities').select('*').eq('contact_id', showLeadDetail).order('created_at', { ascending: false });
+      if (error) throw error;
+      return data || [];
+    },
+  });
 
   // Add lead mutation
   const addLeadMutation = useMutation({
@@ -154,8 +185,69 @@ export function LeadManagementModule({ universities }: LeadManagementModuleProps
     setDraggedLead(null);
   }, [stages, queryClient]);
 
-  const toggleColumn = (key: string) => setVisibleColumns(prev => { const n = new Set(prev); n.has(key) ? n.delete(key) : n.add(key); return n; });
-  const toggleSelectLead = (id: string) => setSelectedLeads(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  const updateContacts = async (ids: string[], values: Record<string, unknown>) => {
+    const { error } = await supabase.from('crm_contacts').update(values).in('id', ids);
+    if (error) throw error;
+    await queryClient.invalidateQueries({ queryKey: ['crm-leads-management'] });
+  };
+
+  const assignSelectedToMe = async () => {
+    await updateContacts([...selectedLeads], { assigned_to: (user?.user_metadata as any)?.full_name || user?.email || 'Current user' });
+    toast({ title: 'Leads assigned', description: `${selectedLeads.size} leads are now assigned to you.` });
+    setSelectedLeads(new Set());
+  };
+
+  const moveSelectedToStage = async (stageId: string) => {
+    await updateContacts([...selectedLeads], { stage_id: stageId });
+    toast({ title: 'Stage updated', description: `${selectedLeads.size} leads moved successfully.` });
+    setSelectedLeads(new Set());
+  };
+
+  const exportCsv = (items = filteredLeads) => {
+    const escape = (value: unknown) => `"${String(value ?? '').replace(/"/g, '""')}"`;
+    const rows = [['Name', 'Mobile', 'Email', 'Source', 'Stage', 'Score', 'Course', 'City', 'Owner'], ...items.map(lead => [lead.name, lead.mobile, lead.email, lead.source, lead.stage, lead.score, lead.course, lead.city, lead.raw.assigned_to || ''])];
+    const blob = new Blob([rows.map(row => row.map(escape).join(',')).join('\n')], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `crm-leads-${new Date().toISOString().slice(0, 10)}.csv`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const importCsv = async (file?: File) => {
+    if (!file) return;
+    const lines = (await file.text()).split(/\r?\n/).filter(Boolean);
+    const cells = (line: string) => line.split(',').map(value => value.trim().replace(/^"|"$/g, '').replace(/""/g, '"'));
+    const headers = cells(lines.shift() || '').map(value => value.toLowerCase());
+    const defaultStage = stages.find(stage => stage.name === 'Inquiry') || stages[0];
+    const records = lines.map(line => {
+      const values = cells(line);
+      const row = Object.fromEntries(headers.map((header, index) => [header, values[index] || '']));
+      return { name: row.name || row['full name'], mobile: row.mobile || row.phone, email: row.email || null, source: row.source || 'CSV Import', course: row.course || null, city: row.city || null, stage_id: defaultStage?.id || null };
+    }).filter(row => row.name && row.mobile);
+    if (!records.length) return toast({ title: 'No valid rows', description: 'CSV needs Name and Mobile columns.', variant: 'destructive' });
+    const { error } = await supabase.from('crm_contacts').insert(records);
+    if (error) return toast({ title: 'Import failed', description: error.message, variant: 'destructive' });
+    await queryClient.invalidateQueries({ queryKey: ['crm-leads-management'] });
+    toast({ title: 'Import complete', description: `${records.length} leads added.` });
+  };
+
+  const toggleFavourite = async (lead: any) => {
+    await updateContacts([lead.id], { custom_fields: { ...(lead.raw.custom_fields || {}), favourite: !lead.favourite } });
+  };
+
+  const addActivity = async () => {
+    if (!activeLead || !activityNote.trim()) return;
+    const { error } = await supabase.from('crm_activities').insert({ contact_id: activeLead.id, type: activityType, title: activityType === 'note' ? 'Counsellor note' : `${activityType[0].toUpperCase()}${activityType.slice(1)} interaction`, description: activityNote.trim(), created_by: user?.email || null, completed_at: new Date().toISOString() });
+    if (error) return toast({ title: 'Activity not saved', description: error.message, variant: 'destructive' });
+    setActivityNote('');
+    await Promise.all([queryClient.invalidateQueries({ queryKey: ['crm-lead-activities', activeLead.id] }), updateContacts([activeLead.id], { last_contacted_at: new Date().toISOString() })]);
+    toast({ title: 'Activity recorded' });
+  };
+
+  const toggleColumn = (key: string) => setVisibleColumns(prev => { const n = new Set(prev); if (n.has(key)) n.delete(key); else n.add(key); return n; });
+  const toggleSelectLead = (id: string) => setSelectedLeads(prev => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   const toggleSelectAll = () => setSelectedLeads(prev => prev.size === filteredLeads.length ? new Set() : new Set(filteredLeads.map(l => l.id)));
   const getScoreColor = (score: number) => score >= 70 ? 'text-green-500' : score >= 40 ? 'text-amber-500' : 'text-red-500';
 
@@ -187,6 +279,14 @@ export function LeadManagementModule({ universities }: LeadManagementModuleProps
         ))}
       </div>
 
+      <div className="mb-4 flex items-center gap-1 overflow-x-auto border-b" role="tablist" aria-label="Saved lead views">
+        {['All Leads', 'Untouched', 'My Follow-ups', 'Applications', 'Favourites'].map(view => (
+          <button key={view} role="tab" aria-selected={savedView === view} onClick={() => setSavedView(view)} className={cn('whitespace-nowrap border-b-2 px-3 py-2 text-sm font-medium', savedView === view ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground')}>
+            {view}{view === 'Untouched' && <span className="ml-2 rounded bg-muted px-1.5 py-0.5 text-xs">{leads.filter(lead => !lead.lastContactedAt).length}</span>}
+          </button>
+        ))}
+      </div>
+
       <div className="flex gap-3 mb-4 flex-wrap items-center">
         <div className="relative flex-1 min-w-[200px]">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -208,6 +308,9 @@ export function LeadManagementModule({ universities }: LeadManagementModuleProps
             {ALL_COLUMNS.map(col => <DropdownMenuCheckboxItem key={col.key} checked={visibleColumns.has(col.key)} onCheckedChange={() => toggleColumn(col.key)}>{col.label}</DropdownMenuCheckboxItem>)}
           </DropdownMenuContent>
         </DropdownMenu>
+        <input ref={importRef} type="file" accept=".csv,text/csv" className="hidden" onChange={event => { void importCsv(event.target.files?.[0]); event.currentTarget.value = ''; }} />
+        <Button variant="outline" size="sm" onClick={() => importRef.current?.click()} className="gap-1"><Upload className="h-3.5 w-3.5" /> Import</Button>
+        <Button variant="outline" size="sm" onClick={() => exportCsv()} className="gap-1"><Download className="h-3.5 w-3.5" /> Export</Button>
         <div className="flex border rounded-lg overflow-hidden">
           <Button variant={viewMode === 'table' ? 'default' : 'ghost'} size="sm" className="rounded-none" onClick={() => setViewMode('table')}><List className="h-4 w-4" /></Button>
           <Button variant={viewMode === 'kanban' ? 'default' : 'ghost'} size="sm" className="rounded-none" onClick={() => setViewMode('kanban')}><LayoutGrid className="h-4 w-4" /></Button>
@@ -218,8 +321,9 @@ export function LeadManagementModule({ universities }: LeadManagementModuleProps
         <div className="bg-primary/10 border border-primary/20 rounded-lg p-3 mb-4 flex items-center justify-between">
           <span className="text-sm font-medium">{selectedLeads.size} leads selected</span>
           <div className="flex gap-2">
-            <Button size="sm" variant="outline">Assign</Button>
-            <Button size="sm" variant="outline">Change Stage</Button>
+            <Button size="sm" variant="outline" onClick={() => void assignSelectedToMe()} className="gap-1"><UserRoundCog className="h-3.5 w-3.5" /> Assign to me</Button>
+            <Select onValueChange={value => void moveSelectedToStage(value)}><SelectTrigger className="h-9 w-[150px]"><SelectValue placeholder="Change stage" /></SelectTrigger><SelectContent>{stages.map(stage => <SelectItem key={stage.id} value={stage.id}>{stage.name}</SelectItem>)}</SelectContent></Select>
+            <Button size="sm" variant="outline" onClick={() => exportCsv(leads.filter(lead => selectedLeads.has(lead.id)))}><Download className="h-3.5 w-3.5" /></Button>
           </div>
         </div>
       )}
@@ -241,7 +345,7 @@ export function LeadManagementModule({ universities }: LeadManagementModuleProps
                 {filteredLeads.slice(0, 50).map(lead => (
                   <tr key={lead.id} className="border-b hover:bg-muted/20">
                     <td className="p-3"><Checkbox checked={selectedLeads.has(lead.id)} onCheckedChange={() => toggleSelectLead(lead.id)} /></td>
-                    {visibleColumns.has('name') && <td className="p-3"><div className="flex items-center gap-2"><span className="font-medium">{lead.name}</span><Badge className={cn("text-[10px] px-1.5 py-0", lead.freshness.color)}>{lead.freshness.label}</Badge></div></td>}
+                    {visibleColumns.has('name') && <td className="p-3"><div className="flex items-center gap-2"><button title="Favourite" aria-label={`Favourite ${lead.name}`} onClick={() => void toggleFavourite(lead)} className={cn('text-muted-foreground hover:text-amber-500', lead.favourite && 'text-amber-500')}><Star className="h-4 w-4" fill={lead.favourite ? 'currentColor' : 'none'} /></button><button onClick={() => setShowLeadDetail(lead.id)} className="font-medium text-left hover:text-primary hover:underline">{lead.name}</button><Badge className={cn("text-[10px] px-1.5 py-0", lead.freshness.color)}>{lead.freshness.label}</Badge></div></td>}
                     {visibleColumns.has('mobile') && <td className="p-3 font-mono text-xs">{lead.mobile}</td>}
                     {visibleColumns.has('email') && <td className="p-3 text-xs">{lead.email}</td>}
                     {visibleColumns.has('source') && <td className="p-3"><Badge variant="secondary" className="text-xs">{lead.source}</Badge></td>}
@@ -253,9 +357,9 @@ export function LeadManagementModule({ universities }: LeadManagementModuleProps
                     {visibleColumns.has('createdAt') && <td className="p-3 text-xs">{lead.createdAt}</td>}
                     <td className="p-3 text-right">
                       <div className="flex items-center justify-end gap-1">
-                        <Button variant="ghost" size="icon" className="h-7 w-7"><MessageSquare className="h-3.5 w-3.5 text-green-500" /></Button>
-                        <Button variant="ghost" size="icon" className="h-7 w-7"><Mail className="h-3.5 w-3.5 text-blue-500" /></Button>
-                        <Button variant="ghost" size="icon" className="h-7 w-7"><Phone className="h-3.5 w-3.5 text-amber-500" /></Button>
+                        <Button title="WhatsApp" variant="ghost" size="icon" className="h-7 w-7" onClick={() => window.open(`https://wa.me/${lead.mobile.replace(/\D/g, '')}`, '_blank')}><MessageSquare className="h-3.5 w-3.5 text-green-500" /></Button>
+                        <Button title="Email" variant="ghost" size="icon" className="h-7 w-7" onClick={() => { window.location.href = `mailto:${lead.email}`; }}><Mail className="h-3.5 w-3.5 text-blue-500" /></Button>
+                        <Button title="Call" variant="ghost" size="icon" className="h-7 w-7" onClick={() => { window.location.href = `tel:${lead.mobile}`; }}><Phone className="h-3.5 w-3.5 text-amber-500" /></Button>
                       </div>
                     </td>
                   </tr>
@@ -326,6 +430,21 @@ export function LeadManagementModule({ universities }: LeadManagementModuleProps
               {addLeadMutation.isPending ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Adding...</> : 'Add Lead'}
             </Button>
           </div>
+        </SheetContent>
+      </Sheet>
+
+      <Sheet open={Boolean(activeLead)} onOpenChange={open => !open && setShowLeadDetail(null)}>
+        <SheetContent className="overflow-y-auto sm:max-w-xl">
+          {activeLead && <>
+            <SheetHeader><SheetTitle className="flex items-center gap-3"><span className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-sm font-semibold text-primary">{activeLead.name.split(' ').map((part: string) => part[0]).slice(0, 2).join('')}</span><span>{activeLead.name}</span></SheetTitle><SheetDescription>{activeLead.mobile} · {activeLead.email || 'No email'}</SheetDescription></SheetHeader>
+            <div className="mt-6 grid grid-cols-2 gap-3">
+              <div><Label>Stage</Label><Select value={activeLead.stageId || ''} onValueChange={value => void updateContacts([activeLead.id], { stage_id: value })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{stages.map(stage => <SelectItem key={stage.id} value={stage.id}>{stage.name}</SelectItem>)}</SelectContent></Select></div>
+              <div><Label>Priority</Label><Select value={activeLead.priority} onValueChange={value => void updateContacts([activeLead.id], { priority: value })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{['Low', 'Medium', 'High', 'Urgent'].map(value => <SelectItem key={value} value={value}>{value}</SelectItem>)}</SelectContent></Select></div>
+              <div className="col-span-2"><Label>Owner</Label><Input value={activeLead.raw.assigned_to || ''} placeholder="Assign counsellor" onChange={event => { activeLead.raw.assigned_to = event.target.value; }} onBlur={event => void updateContacts([activeLead.id], { assigned_to: event.target.value || null })} /></div>
+            </div>
+            <div className="mt-6 grid grid-cols-2 gap-3 rounded-md border p-4 text-sm"><div><span className="text-muted-foreground">Course</span><p className="font-medium">{activeLead.course || 'Not selected'}</p></div><div><span className="text-muted-foreground">Source</span><p className="font-medium">{activeLead.source}</p></div><div><span className="text-muted-foreground">City</span><p className="font-medium">{activeLead.city || 'Not provided'}</p></div><div><span className="text-muted-foreground">Lead score</span><p className={cn('font-semibold', getScoreColor(activeLead.score))}>{activeLead.score}</p></div></div>
+            <div className="mt-7"><div className="mb-3 flex items-center justify-between"><h3 className="font-semibold">Activity timeline</h3><Badge variant="outline">{activeActivities.length}</Badge></div><div className="mb-4 rounded-md border p-3"><div className="mb-3 flex gap-1">{['note', 'call', 'whatsapp', 'email'].map(type => <Button key={type} size="sm" variant={activityType === type ? 'default' : 'ghost'} onClick={() => setActivityType(type)} className="capitalize">{type}</Button>)}</div><textarea value={activityNote} onChange={event => setActivityNote(event.target.value)} className="min-h-20 w-full resize-y rounded-md border bg-background p-2 text-sm outline-none focus:ring-2 focus:ring-ring" placeholder="Add interaction details" /><div className="mt-2 flex justify-end"><Button size="sm" onClick={() => void addActivity()} disabled={!activityNote.trim()}>Save activity</Button></div></div><div className="space-y-3">{activeActivities.map((activity: any) => <div key={activity.id} className="flex gap-3 border-l-2 border-primary/30 pl-4"><span className="mt-0.5 rounded bg-muted p-1.5">{activity.type === 'call' ? <Phone className="h-3.5 w-3.5" /> : <Clock3 className="h-3.5 w-3.5" />}</span><div><p className="text-sm font-medium">{activity.title}</p><p className="text-sm text-muted-foreground">{activity.description}</p><time className="text-xs text-muted-foreground">{new Date(activity.created_at).toLocaleString()}</time></div></div>)}{!activeActivities.length && <div className="flex flex-col items-center gap-2 rounded-md border border-dashed py-8 text-muted-foreground"><CalendarClock className="h-5 w-5" /><p className="text-sm">No activity recorded yet</p></div>}</div></div>
+          </>}
         </SheetContent>
       </Sheet>
     </div>

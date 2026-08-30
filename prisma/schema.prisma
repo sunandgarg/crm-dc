@@ -1,0 +1,449 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model AppUser {
+  id              String        @id @default(uuid()) @db.Uuid
+  email           String        @unique
+  full_name       String?
+  role            String        @default("counsellor")
+  team            String?
+  is_active       Boolean       @default(true)
+  is_approved     Boolean       @default(true)
+  last_sign_in_at DateTime?     @db.Timestamptz(6)
+  created_at      DateTime      @default(now()) @db.Timestamptz(6)
+  updated_at      DateTime      @updatedAt @db.Timestamptz(6)
+  otp_codes       OtpCode[]
+  audit_logs      AuditLog[]
+
+  @@map("app_users")
+}
+
+model OtpCode {
+  id          String   @id @default(uuid()) @db.Uuid
+  user_id     String   @db.Uuid
+  code_hash   String
+  expires_at  DateTime @db.Timestamptz(6)
+  attempts    Int      @default(0)
+  consumed_at DateTime? @db.Timestamptz(6)
+  created_at  DateTime @default(now()) @db.Timestamptz(6)
+  user        AppUser  @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id, created_at])
+  @@map("otp_codes")
+}
+
+model profiles {
+  id              String    @id @default(uuid()) @db.Uuid
+  email           String    @unique
+  full_name       String?
+  role            String?   @default("counsellor")
+  is_approved     Boolean?  @default(true)
+  approved_at     DateTime? @db.Timestamptz(6)
+  approved_by     String?
+  last_sign_in_at DateTime? @db.Timestamptz(6)
+  created_at      DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at      DateTime  @updatedAt @db.Timestamptz(6)
+}
+
+model universities {
+  id                       String    @id @default(uuid()) @db.Uuid
+  name                     String
+  api_url                  String
+  college_id               String
+  secret_key               String
+  source                   String?   @default("dekhocampus")
+  medium                   String?   @default("dekhocampus")
+  campaign                 String?   @default("API")
+  api_type                 String?   @default("nopaperforms")
+  leads_per_minute         Int?      @default(5)
+  api_timeout_seconds      Int?      @default(30)
+  default_push_concurrency Int?      @default(1)
+  column_mapping           Json?     @default("{}")
+  payload_wrapper          String?   @default("object")
+  auth_type                String?   @default("secret_key")
+  auth_header_key          String?
+  auth_header_value        String?
+  custom_headers           Json?     @default("{}")
+  default_values           Json?     @default("{}")
+  sample_csv_content       String?
+  status                   String    @default("Active")
+  state                    String?
+  city                     String?
+  contact_person_name      String?
+  contact_person_email     String?
+  contact_person_mobile    String?
+  daily_lead_limit         Int?
+  daily_limit              Int?
+  daily_pushed_count       Int       @default(0)
+  daily_count_reset_at     DateTime  @default(now()) @db.Timestamptz(6)
+  auto_retry_enabled       Boolean?  @default(false)
+  auto_retry_max_attempts  Int?      @default(0)
+  auto_retry_delay_minutes Int?      @default(5)
+  admission_commitment     Int?
+  deal_price               Decimal?  @db.Decimal(12, 2)
+  gst_inclusive            Boolean?
+  publisher_id             String?
+  publisher_panel_url      String?
+  utm_link                 String?
+  whatsapp_group_link      String?
+  created_at               DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at               DateTime  @updatedAt @db.Timestamptz(6)
+  leads                    leads[]
+  batches                  upload_batches[]
+  api_logs                 api_logs[]
+  programs                 programs[]
+  state_cities             state_cities[]
+  course_specializations   course_specializations[]
+  custom_columns           custom_columns[]
+  contacts                 crm_contacts[]
+}
+
+model upload_batches {
+  id                 String    @id @default(uuid()) @db.Uuid
+  university_id      String    @db.Uuid
+  user_id             String    @default("")
+  file_name           String
+  total_leads         Int       @default(0)
+  success_count       Int       @default(0)
+  fail_count          Int       @default(0)
+  duplicate_count     Int       @default(0)
+  processed_count     Int?      @default(0)
+  current_lead_index  Int?      @default(0)
+  status              String?   @default("pending")
+  is_paused           Boolean?  @default(false)
+  is_cancelled        Boolean?  @default(false)
+  leads_per_minute    Int?
+  csv_data            String?
+  api_config          Json?
+  source_label        String?
+  error_message       String?
+  scheduled_at        DateTime? @db.Timestamptz(6)
+  created_at          DateTime  @default(now()) @db.Timestamptz(6)
+  completed_at        DateTime? @db.Timestamptz(6)
+  university          universities @relation(fields: [university_id], references: [id], onDelete: Cascade)
+  leads               leads[]
+  api_logs            api_logs[]
+
+  @@index([status, scheduled_at])
+}
+
+model leads {
+  id              String    @id @default(uuid()) @db.Uuid
+  batch_id        String    @db.Uuid
+  university_id   String    @db.Uuid
+  name            String
+  email           String
+  mobile          String
+  address         String?
+  state           String?
+  city            String?
+  course          String?
+  specialization  String?
+  lead_source     String?
+  lead_medium     String?
+  lead_campaign   String?
+  extra_data      Json?     @default("{}")
+  status          String?   @default("pending")
+  api_response    String?
+  retry_count     Int?      @default(0)
+  processed_at    DateTime? @db.Timestamptz(6)
+  created_at      DateTime  @default(now()) @db.Timestamptz(6)
+  batch           upload_batches @relation(fields: [batch_id], references: [id], onDelete: Cascade)
+  university      universities @relation(fields: [university_id], references: [id], onDelete: Cascade)
+  api_logs        api_logs[]
+  contacts        crm_contacts[]
+
+  @@index([status, created_at])
+  @@index([email, mobile])
+}
+
+model api_logs {
+  id             String   @id @default(uuid()) @db.Uuid
+  university_id  String   @db.Uuid
+  lead_id        String?  @db.Uuid
+  batch_id       String?  @db.Uuid
+  user_id        String?
+  application_no String?
+  trigger_point  String?  @default("Lead Upload")
+  webhook_id     String?
+  data_push_type String?  @default("Real Time")
+  email          String?
+  mobile         String?
+  form           String?
+  status         String
+  response       String?
+  lead_data      Json?
+  source         String?
+  medium         String?
+  campaign       String?
+  created_at     DateTime @default(now()) @db.Timestamptz(6)
+  university     universities @relation(fields: [university_id], references: [id], onDelete: Cascade)
+  lead           leads? @relation(fields: [lead_id], references: [id], onDelete: SetNull)
+  batch          upload_batches? @relation(fields: [batch_id], references: [id], onDelete: SetNull)
+
+  @@index([university_id, created_at])
+}
+
+model pipeline_stages {
+  id         String   @id @default(uuid()) @db.Uuid
+  name       String   @unique
+  color      String   @default("#3b82f6")
+  sort_order Int      @default(0)
+  is_default Boolean? @default(false)
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+  contacts   crm_contacts[]
+}
+
+model crm_contacts {
+  id                       String    @id @default(uuid()) @db.Uuid
+  lead_id                  String?   @db.Uuid
+  university_id            String?   @db.Uuid
+  stage_id                 String?   @db.Uuid
+  name                     String
+  email                    String?
+  mobile                   String
+  alternate_mobile         String?
+  state                    String?
+  city                     String?
+  course                   String?
+  specialization           String?
+  source                   String?
+  priority                 String?   @default("Medium")
+  tags                     String[]  @default([])
+  lead_score               Int?      @default(50)
+  lead_quality             String?
+  lead_score_updated_at    DateTime? @db.Timestamptz(6)
+  assigned_to              String?
+  notes                    String?
+  custom_fields            Json?     @default("{}")
+  last_contacted_at        DateTime? @db.Timestamptz(6)
+  next_follow_up           DateTime? @db.Timestamptz(6)
+  expected_enrollment_date DateTime? @db.Date
+  created_at               DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at               DateTime  @updatedAt @db.Timestamptz(6)
+  lead                     leads? @relation(fields: [lead_id], references: [id], onDelete: SetNull)
+  university               universities? @relation(fields: [university_id], references: [id], onDelete: SetNull)
+  pipeline_stage           pipeline_stages? @relation(fields: [stage_id], references: [id], onDelete: SetNull)
+  activities               crm_activities[]
+  tasks                    crm_tasks[]
+
+  @@index([stage_id, assigned_to])
+  @@index([email, mobile])
+}
+
+model crm_activities {
+  id               String    @id @default(uuid()) @db.Uuid
+  contact_id       String    @db.Uuid
+  type             String
+  title            String
+  description      String?
+  outcome          String?
+  duration_minutes Int?
+  scheduled_at     DateTime? @db.Timestamptz(6)
+  completed_at     DateTime? @db.Timestamptz(6)
+  created_by       String?
+  metadata         Json?
+  created_at       DateTime  @default(now()) @db.Timestamptz(6)
+  contact          crm_contacts @relation(fields: [contact_id], references: [id], onDelete: Cascade)
+
+  @@index([contact_id, created_at])
+}
+
+model crm_tasks {
+  id           String    @id @default(uuid()) @db.Uuid
+  contact_id   String?   @db.Uuid
+  title        String
+  description  String?
+  status       String    @default("pending")
+  priority     String    @default("medium")
+  assigned_to  String?
+  due_at       DateTime? @db.Timestamptz(6)
+  completed_at DateTime? @db.Timestamptz(6)
+  created_at   DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at   DateTime  @updatedAt @db.Timestamptz(6)
+  contact      crm_contacts? @relation(fields: [contact_id], references: [id], onDelete: SetNull)
+}
+
+model programs {
+  id            String   @id @default(uuid()) @db.Uuid
+  university_id String   @db.Uuid
+  name          String
+  created_at    DateTime @default(now()) @db.Timestamptz(6)
+  university    universities @relation(fields: [university_id], references: [id], onDelete: Cascade)
+}
+
+model state_cities {
+  id            String   @id @default(uuid()) @db.Uuid
+  university_id String   @db.Uuid
+  state         String
+  city          String
+  created_at    DateTime @default(now()) @db.Timestamptz(6)
+  university    universities @relation(fields: [university_id], references: [id], onDelete: Cascade)
+}
+
+model course_specializations {
+  id             String   @id @default(uuid()) @db.Uuid
+  university_id  String   @db.Uuid
+  course         String
+  specialization String?
+  created_at     DateTime @default(now()) @db.Timestamptz(6)
+  university     universities @relation(fields: [university_id], references: [id], onDelete: Cascade)
+}
+
+model custom_columns {
+  id            String   @id @default(uuid()) @db.Uuid
+  university_id String   @db.Uuid
+  column_name   String
+  column_key    String
+  is_required   Boolean? @default(false)
+  sort_order    Int?     @default(0)
+  created_at    DateTime @default(now()) @db.Timestamptz(6)
+  university    universities @relation(fields: [university_id], references: [id], onDelete: Cascade)
+  values        custom_column_values[]
+}
+
+model custom_column_values {
+  id               String   @id @default(uuid()) @db.Uuid
+  university_id    String   @db.Uuid
+  column_id        String   @db.Uuid
+  value            String
+  parent_column_id String?  @db.Uuid
+  parent_value_id  String?  @db.Uuid
+  created_at       DateTime @default(now()) @db.Timestamptz(6)
+  column           custom_columns @relation(fields: [column_id], references: [id], onDelete: Cascade)
+}
+
+model automation_rules {
+  id                String    @id @default(uuid()) @db.Uuid
+  name              String
+  description       String?   @default("")
+  priority          Int?      @default(1)
+  status            String?   @default("Active")
+  conditions        Json?     @default("[]")
+  actions           Json?     @default("[]")
+  retry_enabled     Boolean?  @default(true)
+  max_retries       Int?      @default(2)
+  retry_after       String?   @default("5min")
+  triggered_count   Int?      @default(0)
+  success_count     Int?      @default(0)
+  fail_count        Int?      @default(0)
+  last_triggered_at DateTime? @db.Timestamptz(6)
+  created_at        DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at        DateTime  @updatedAt @db.Timestamptz(6)
+}
+
+model marketing_campaigns {
+  id               String    @id @default(uuid()) @db.Uuid
+  name             String
+  description      String?
+  channels         String[]  @default([])
+  template_id      String?   @db.Uuid
+  integration_id   String?   @db.Uuid
+  recipient_count  Int?      @default(0)
+  status           String    @default("draft")
+  send_at          DateTime? @db.Timestamptz(6)
+  timezone         String?   @default("UTC")
+  recurrence       String?
+  ab_test_config   Json?
+  recipient_filter Json?
+  sent_at          DateTime? @db.Timestamptz(6)
+  completed_at     DateTime? @db.Timestamptz(6)
+  created_by       String?   @db.Uuid
+  created_at       DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at       DateTime  @updatedAt @db.Timestamptz(6)
+}
+
+model url_mappings {
+  id              String    @id @default(uuid()) @db.Uuid
+  original_url    String
+  short_code      String    @unique
+  header          String?
+  domain          String?
+  title           String?
+  tags            String[]  @default([])
+  clicks          Int       @default(0)
+  custom_code     Boolean   @default(false)
+  code_length     Int?
+  is_active       Boolean   @default(true)
+  is_healthy      Boolean?  @default(true)
+  user_tracking   Boolean?  @default(false)
+  user_id         String?
+  last_checked_at DateTime? @db.Timestamptz(6)
+  expires_at      DateTime? @db.Timestamptz(6)
+  created_at      DateTime  @default(now()) @db.Timestamptz(6)
+}
+
+model feature_toggles {
+  id          String   @id @default(uuid()) @db.Uuid
+  feature_key String   @unique
+  name        String
+  description String?
+  is_enabled  Boolean  @default(true)
+  created_at  DateTime @default(now()) @db.Timestamptz(6)
+  updated_at  DateTime @updatedAt @db.Timestamptz(6)
+}
+
+model user_roles {
+  id         String   @id @default(uuid()) @db.Uuid
+  user_id    String   @db.Uuid
+  role       String
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+  @@unique([user_id, role])
+}
+
+model user_permissions {
+  id         String   @id @default(uuid()) @db.Uuid
+  user_id    String   @db.Uuid
+  permission String
+  granted_by String?  @db.Uuid
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+  @@unique([user_id, permission])
+}
+
+model ResourceRecord {
+  id         String   @id @default(uuid()) @db.Uuid
+  resource   String
+  external_id String?
+  payload    Json     @default("{}")
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+  updated_at DateTime @updatedAt @db.Timestamptz(6)
+
+  @@unique([resource, external_id])
+  @@index([resource, created_at])
+  @@map("resource_records")
+}
+
+model FileAsset {
+  id           String   @id @default(uuid()) @db.Uuid
+  object_key   String   @unique
+  bucket       String
+  content_type String?
+  size_bytes   BigInt?
+  owner_id     String?  @db.Uuid
+  metadata     Json?    @default("{}")
+  created_at   DateTime @default(now()) @db.Timestamptz(6)
+
+  @@map("file_assets")
+}
+
+model AuditLog {
+  id          String   @id @default(uuid()) @db.Uuid
+  actor_id    String?  @db.Uuid
+  action      String
+  resource    String
+  resource_id String?
+  before      Json?
+  after       Json?
+  ip_address  String?
+  created_at  DateTime @default(now()) @db.Timestamptz(6)
+  actor       AppUser? @relation(fields: [actor_id], references: [id], onDelete: SetNull)
+
+  @@index([resource, created_at])
+  @@map("audit_logs")
+}

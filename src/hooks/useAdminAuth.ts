@@ -12,7 +12,7 @@ interface AdminAuthState {
 
 const ADMIN_AUTH_TIMEOUT_MS = 8000;
 
-function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
+function withTimeout<T>(promise: PromiseLike<T>, timeoutMs: number, message: string): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     const timer = window.setTimeout(() => reject(new Error(message)), timeoutMs);
     promise.then(

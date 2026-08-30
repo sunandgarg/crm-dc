@@ -1,31 +1,60 @@
-# LeadPush
+# CRM DC
 
-Independent React and Supabase application for lead management, partner-college lead delivery, and URL shortening.
+Admissions CRM and partner lead-delivery platform built with React, TypeScript, Express, PostgreSQL, Prisma, S3-compatible storage, and AWS SES email OTP.
 
-## Local development
+## Stack
 
-Requirements: Node.js 20 or newer and npm.
+- Web: React 18, TypeScript, Vite, Tailwind, TanStack Query
+- API: Node.js 20+, TypeScript, Express 5
+- Data: PostgreSQL 16 and Prisma
+- Files: AWS S3 or Cloudflare R2 through presigned URLs
+- Authentication: passwordless email OTP through AWS SES and signed 12-hour sessions
+- Local infrastructure: Docker Compose with PostgreSQL and MinIO
+
+## Run locally
 
 ```sh
-npm install
-npm run dev
+cp .env.example .env
+docker compose up -d
+corepack enable
+pnpm install
+pnpm db:migrate
+pnpm db:seed
+pnpm dev
 ```
 
-Create `.env` with:
+Open `http://localhost:8080`. The API health endpoint is `http://localhost:4000/api/health`. In development, the sign-in screen displays the generated OTP when SES is not configured.
 
-```dotenv
-VITE_SUPABASE_PROJECT_ID=your-project-reference
-VITE_SUPABASE_URL=https://your-project-reference.supabase.co
-VITE_SUPABASE_PUBLISHABLE_KEY=your-publishable-key
+The seeded administrator uses `BOOTSTRAP_ADMIN_EMAIL`. The included university is deliberately non-deliverable until its endpoint and credentials are replaced.
+
+## Important commands
+
+```sh
+pnpm test
+pnpm build
+pnpm db:migrate
+pnpm db:seed
+pnpm db:studio
 ```
 
-## Deployment
+## Deploy
 
-- Frontend: deploy the Vite `dist` directory to Cloudflare Pages.
-- Backend: apply `supabase/migrations` to your Supabase project and deploy every directory in `supabase/functions`.
-- Build command: `npm run build`
-- Build output: `dist`
+Deploy `Dockerfile.api` to a Node container service with PostgreSQL, AWS credentials, SES sender identity, and S3/R2 variables. Deploy `Dockerfile.web` or the Vite `dist` directory to Cloudflare Pages, setting `VITE_API_URL` to the public API origin. Run `pnpm db:migrate` during API release.
 
-Set the three `VITE_SUPABASE_*` values as Cloudflare Pages build variables. Configure server-only integration credentials, including `META_VERIFY_TOKEN`, as Supabase Edge Function secrets; never add service-role or secret keys to `VITE_*` variables.
+Production must use strong values for `JWT_SECRET`, `INBOUND_API_KEY`, and `WEBHOOK_SECRET`. Keep partner secrets, AWS credentials, the Supabase service role key, and database credentials out of `VITE_*` variables.
 
-The frontend and backend are independent of any website-builder hosting service.
+## Migration
+
+The previous Supabase implementation is preserved read-only under `legacy/supabase` for audit history. It is not imported by the runtime.
+
+To transfer authorized source data, first deploy and migrate the target database, obtain a CRM administrator token, then run:
+
+```sh
+SOURCE_SUPABASE_URL=https://project.supabase.co \
+SOURCE_SUPABASE_SERVICE_ROLE_KEY=... \
+DESTINATION_API_URL=http://localhost:4000 \
+DESTINATION_API_TOKEN=... \
+pnpm tsx scripts/migrate-supabase-to-postgres.ts
+```
+
+The utility prints a per-table read/write/error ledger and exits nonzero on any omission. Review [the migration ledger](docs/MIGRATION_LEDGER.md) and [system wiremap](docs/SYSTEM_WIREMAP.md) before production cutover.
