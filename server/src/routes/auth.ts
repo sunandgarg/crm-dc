@@ -18,6 +18,10 @@ authRouter.post('/request-otp', asyncRoute(async (request, response) => {
   const attempts = (recentRequests.get(email) ?? []).filter((timestamp) => now - timestamp < 15 * 60_000);
   if (attempts.length >= 5) throw new HttpError(429, 'Too many OTP requests. Try again later.');
   recentRequests.set(email, [...attempts, now]);
+  if (recentRequests.size > 10_000) {
+    for (const [key, timestamps] of recentRequests) if (!timestamps.some((timestamp) => now - timestamp < 15 * 60_000)) recentRequests.delete(key);
+    while (recentRequests.size > 10_000) recentRequests.delete(recentRequests.keys().next().value as string);
+  }
 
   let user = await prisma.appUser.findUnique({ where: { email } });
   if (!user && !isProduction) {
@@ -28,6 +32,8 @@ authRouter.post('/request-otp', asyncRoute(async (request, response) => {
 
   // Keep the response indistinguishable for unknown or inactive accounts.
   if (!user?.is_active || !user.is_approved) return response.json({ success: true });
+  const recentCodes = await prisma.otpCode.count({ where: { user_id: user.id, created_at: { gt: new Date(now - 15 * 60_000) } } });
+  if (recentCodes >= 5) return response.json({ success: true });
 
   const code = generateOtp();
   await prisma.otpCode.create({
@@ -69,8 +75,8 @@ authRouter.post('/verify-otp', asyncRoute(async (request, response) => {
     }),
   ]);
 
-  const authUser = { id: user.id, email: user.email, role: user.role, full_name: user.full_name };
-  response.json({ token: signToken(authUser), user: authUser, expiresIn: 43_200 });
+  const authUser = { id: user.id, email: user.email, role: user.role, full_name: user.full_name, sessionVersion: user.session_version };
+  response.json({ token: signToken(authUser), user: authUser, expiresIn: config.SESSION_TTL_HOURS * 3600 });
 }));
 
 authRouter.get('/me', requireAuth, asyncRoute(async (request, response) => {

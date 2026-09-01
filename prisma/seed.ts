@@ -3,6 +3,7 @@ import { PrismaClient } from '@prisma/client';
 const prisma = new PrismaClient();
 
 async function main() {
+  if (process.env.NODE_ENV === 'production' && !process.env.BOOTSTRAP_ADMIN_EMAIL) throw new Error('BOOTSTRAP_ADMIN_EMAIL is required for production seeding');
   const adminEmail = String(process.env.BOOTSTRAP_ADMIN_EMAIL || 'admin@example.com').toLowerCase();
   const admin = await prisma.appUser.upsert({
     where: { email: adminEmail },
@@ -24,6 +25,8 @@ async function main() {
     const [name, color] = stageDefinitions[index];
     stages.push(await prisma.pipeline_stages.upsert({ where: { name }, create: { name, color, sort_order: index, is_default: index === 0 }, update: { color, sort_order: index } }));
   }
+
+  if (process.env.NODE_ENV === 'production' && process.env.SEED_DEMO_DATA !== 'true') return;
 
   const university = await prisma.universities.upsert({
     where: { id: '11111111-1111-4111-8111-111111111111' },

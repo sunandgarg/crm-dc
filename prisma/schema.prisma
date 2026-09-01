@@ -18,6 +18,7 @@ model AppUser {
   last_sign_in_at DateTime?     @db.Timestamptz(6)
   created_at      DateTime      @default(now()) @db.Timestamptz(6)
   updated_at      DateTime      @updatedAt @db.Timestamptz(6)
+  session_version Int           @default(0)
   otp_codes       OtpCode[]
   audit_logs      AuditLog[]
 
@@ -35,6 +36,7 @@ model OtpCode {
   user        AppUser  @relation(fields: [user_id], references: [id], onDelete: Cascade)
 
   @@index([user_id, created_at])
+  @@index([expires_at])
   @@map("otp_codes")
 }
 
@@ -125,12 +127,14 @@ model upload_batches {
   error_message       String?
   scheduled_at        DateTime? @db.Timestamptz(6)
   created_at          DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at          DateTime  @updatedAt @db.Timestamptz(6)
   completed_at        DateTime? @db.Timestamptz(6)
   university          universities @relation(fields: [university_id], references: [id], onDelete: Cascade)
   leads               leads[]
   api_logs            api_logs[]
 
   @@index([status, scheduled_at])
+  @@index([user_id, status])
 }
 
 model leads {

@@ -9,12 +9,21 @@ import { sendEmail } from "../services/otp.js";
 import { runAiGateway } from "../services/ai.js";
 import { runQueueBatch, runScheduledBatches } from "../services/batchProcessor.js";
 import { integrationReadiness } from "../services/readiness.js";
+import { assertSafeOutboundUrl } from "../services/outboundUrl.js";
+import { rateLimit } from "../middleware/rateLimit.js";
+import { config as serverConfig } from "../config.js";
 
 export const functionsRouter = Router();
 functionsRouter.use(requireAuth);
 
-functionsRouter.post("/process-lead", asyncRoute(async (request, response) => {
+functionsRouter.post("/process-lead", rateLimit("process-lead", 60_000, serverConfig.PROCESS_RATE_LIMIT_PER_MINUTE, (request) => request.header("authorization")?.slice(-24) || request.ip || "unknown"), asyncRoute(async (request, response) => {
   const body = request.body as LeadTask & { tasks?: LeadTask[]; concurrency?: number };
+  if (!['admin', 'super_admin'].includes(request.user!.role)) {
+    if (body.apiConfig || body.tasks?.some((task) => task.apiConfig)) throw new HttpError(403, "API configuration overrides require administrator access");
+    const batchIds = [...new Set([body.batchId, ...(body.tasks ?? []).map((task) => task.batchId)].filter(Boolean))] as string[];
+    const owned = await prisma.upload_batches.count({ where: { id: { in: batchIds }, user_id: request.user!.id } });
+    if (batchIds.length && owned !== batchIds.length) throw new HttpError(403, "Batch access denied");
+  }
   if (Array.isArray(body.tasks)) return response.json({ results: await processLeadBatch(body.tasks, body.concurrency) });
   response.json(await processLead(body));
 }));
@@ -22,19 +31,23 @@ functionsRouter.post("/process-lead", asyncRoute(async (request, response) => {
 functionsRouter.post("/process-queue", asyncRoute(async (request, response) => {
   const batchId = String(request.body?.batchId || "");
   if (!batchId) throw new HttpError(400, "batchId is required");
+  if (!['admin', 'super_admin'].includes(request.user!.role)) {
+    const batch = await prisma.upload_batches.findFirst({ where: { id: batchId, user_id: request.user!.id } });
+    if (!batch) throw new HttpError(403, "Batch access denied");
+  }
   response.json(await runQueueBatch(batchId));
 }));
 
-functionsRouter.post("/test-api", asyncRoute(async (request, response) => {
+functionsRouter.post("/test-api", requireAdmin, asyncRoute(async (request, response) => {
   const config = request.body as ApiConfig;
   if (!/^https?:\/\//i.test(config.apiUrl || "")) return response.json({ isConfigValid: false, errorMessage: "A valid API URL is required" });
   const built = buildPartnerRequest({ name: "Test Lead", email: "test@example.com", mobile: "9999999999" }, config);
   response.json({ isConfigValid: true, errorMessage: "Configuration and payload mapping are valid", payloadPreview: built.body, headers: Object.keys(built.headers) });
 }));
 
-functionsRouter.post("/test-custom-integration", asyncRoute(async (request, response) => {
+functionsRouter.post("/test-custom-integration", requireAdmin, asyncRoute(async (request, response) => {
   const { url, method = "POST", headers = {}, body = {} } = request.body ?? {};
-  if (!/^https?:\/\//i.test(url || "")) throw new HttpError(400, "A valid URL is required");
+  await assertSafeOutboundUrl(String(url || ""));
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 15_000);
   try {
@@ -43,7 +56,7 @@ functionsRouter.post("/test-custom-integration", asyncRoute(async (request, resp
   } finally { clearTimeout(timer); }
 }));
 
-functionsRouter.post("/purge-university-cache", asyncRoute(async (request, response) => {
+functionsRouter.post("/purge-university-cache", requireAdmin, asyncRoute(async (request, response) => {
   const universityId = String(request.body?.universityId || request.body?.university_id || "");
   if (!universityId) throw new HttpError(400, "universityId is required");
   const result = await prisma.$transaction([
@@ -54,11 +67,11 @@ functionsRouter.post("/purge-university-cache", asyncRoute(async (request, respo
   response.json({ success: true, deleted: result.reduce((sum, item) => sum + item.count, 0) });
 }));
 
-functionsRouter.post("/server-ip", asyncRoute(async (request, response) => {
+functionsRouter.post("/server-ip", requireAdmin, asyncRoute(async (request, response) => {
   response.json({ ip: request.ip, note: "For stable partner allowlisting, assign a fixed egress IP to the API deployment." });
 }));
 
-functionsRouter.post("/verify-domain", asyncRoute(async (request, response) => {
+functionsRouter.post("/verify-domain", requireAdmin, asyncRoute(async (request, response) => {
   const domain = String(request.body?.domain || "").replace(/^https?:\/\//, "").split("/")[0];
   if (!domain) throw new HttpError(400, "domain is required");
   try {
@@ -84,14 +97,17 @@ functionsRouter.post("/admin-user-management", requireAdmin, asyncRoute(async (r
   }
   if (!userId) throw new HttpError(400, "user_id is required");
   if (action === "approve_user") return response.json({ user: await prisma.appUser.update({ where: { id: userId }, data: { is_approved: true, is_active: true } }) });
-  if (action === "revoke_user") return response.json({ user: await prisma.appUser.update({ where: { id: userId }, data: { is_approved: false } }) });
-  if (action === "update_role") return response.json({ user: await prisma.appUser.update({ where: { id: userId }, data: { role: newRole || role } }) });
+  if (action === "revoke_user") return response.json({ user: await prisma.appUser.update({ where: { id: userId }, data: { is_approved: false, session_version: { increment: 1 } } }) });
+  if (action === "update_role") return response.json({ user: await prisma.appUser.update({ where: { id: userId }, data: { role: newRole || role, session_version: { increment: 1 } } }) });
   if (action === "update_permissions") {
     await prisma.user_permissions.deleteMany({ where: { user_id: userId } });
     await prisma.user_permissions.createMany({ data: (permissions as string[]).map((permission) => ({ user_id: userId, permission, granted_by: request.user!.id })) });
     return response.json({ success: true });
   }
-  if (action === "force_logout") return response.json({ success: true, note: "Existing JWTs expire within the configured token lifetime" });
+  if (action === "force_logout") {
+    await prisma.appUser.update({ where: { id: userId }, data: { session_version: { increment: 1 } } });
+    return response.json({ success: true });
+  }
   if (action === "change_password") return response.json({ success: true, note: "Passwords are not stored; this deployment uses AWS SES email OTP" });
   throw new HttpError(400, `Unknown admin action: ${action}`);
 }));
@@ -150,18 +166,18 @@ functionsRouter.post("/cleanup-old-data", requireAdmin, asyncRoute(async (reques
   response.json({ success: true, retentionDays, deleted: { api_logs: logs.count, otp_codes: otps.count, audit_logs: audits.count } });
 }));
 
-functionsRouter.post("/process-scheduled-batches", asyncRoute(async (_request, response) => {
+functionsRouter.post("/process-scheduled-batches", requireAdmin, asyncRoute(async (_request, response) => {
   response.json({ batches: await runScheduledBatches() });
 }));
 
-functionsRouter.post("/sync-leads-to-crm", asyncRoute(async (request, response) => {
+functionsRouter.post("/sync-leads-to-crm", requireAdmin, asyncRoute(async (request, response) => {
   const universityId = request.body?.universityId ? String(request.body.universityId) : undefined;
   const leads = await prisma.leads.findMany({ where: { ...(universityId ? { university_id: universityId } : {}), contacts: { none: {} } }, take: 1000 });
   await prisma.crm_contacts.createMany({ data: leads.map((lead) => ({ lead_id: lead.id, university_id: lead.university_id, name: lead.name, email: lead.email, mobile: lead.mobile, state: lead.state, city: lead.city, course: lead.course, specialization: lead.specialization, source: lead.lead_source, custom_fields: (lead.extra_data as any) || {} })) });
   response.json({ success: true, synced: leads.length });
 }));
 
-functionsRouter.post("/smtp-send", asyncRoute(async (request, response) => {
+functionsRouter.post("/smtp-send", requireAdmin, asyncRoute(async (request, response) => {
   const to = Array.isArray(request.body?.to) ? request.body.to : [request.body?.to || request.body?.email].filter(Boolean);
   if (!to.length || !request.body?.subject) throw new HttpError(400, "to and subject are required");
   await sendEmail({ to, subject: String(request.body.subject), html: request.body.html, text: request.body.text });

@@ -21,7 +21,7 @@ export async function createUploadUrl(objectKey: string, contentType: string) {
 
 export async function createDownloadUrl(objectKey: string) {
   if (config.STORAGE_PUBLIC_BASE_URL) return `${config.STORAGE_PUBLIC_BASE_URL.replace(/\/$/, '')}/${objectKey}`;
-  const command = new GetObjectCommand({ Bucket: config.STORAGE_BUCKET, Key: objectKey });
+  const command = new GetObjectCommand({ Bucket: config.STORAGE_BUCKET, Key: objectKey, ResponseContentDisposition: 'attachment' });
   return getSignedUrl(objectStorage, command, { expiresIn: 600 });
 }
 

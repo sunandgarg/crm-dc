@@ -8,12 +8,12 @@ type AuthCallback = (event: string, session: any) => void;
 const authCallbacks = new Set<AuthCallback>();
 
 function readSession() {
-  try { return JSON.parse(localStorage.getItem(SESSION_KEY) || 'null'); } catch { return null; }
+  try { return JSON.parse(sessionStorage.getItem(SESSION_KEY) || 'null'); } catch { return null; }
 }
 
 function storeSession(session: any) {
-  if (session) localStorage.setItem(SESSION_KEY, JSON.stringify(session));
-  else localStorage.removeItem(SESSION_KEY);
+  if (session) sessionStorage.setItem(SESSION_KEY, JSON.stringify(session));
+  else sessionStorage.removeItem(SESSION_KEY);
   authCallbacks.forEach((callback) => callback(session ? 'SIGNED_IN' : 'SIGNED_OUT', session));
 }
 
@@ -22,9 +22,10 @@ async function apiFetch(path: string, init: RequestInit = {}) {
   const headers = new Headers(init.headers);
   headers.set('content-type', 'application/json');
   if (session?.access_token) headers.set('authorization', `Bearer ${session.access_token}`);
-  const response = await fetch(`${API_URL}${path}`, { ...init, headers });
+  const response = await fetch(`${API_URL}${path}`, { ...init, headers, credentials: 'include' });
   const json = await response.json().catch(() => ({}));
   if (!response.ok) {
+    if (response.status === 401 && !path.includes('/api/auth/')) storeSession(null);
     const error: any = new Error(json.error || `Request failed (${response.status})`);
     error.status = response.status;
     error.code = json.code;

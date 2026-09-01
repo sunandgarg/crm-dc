@@ -170,23 +170,13 @@ export function useAdminAuth(): AdminAuthState & { refetch: () => Promise<void> 
       setState(nextState);
     } catch (error) {
       console.error('Error in admin auth check:', error);
-      const fallbackState = cachedState
-        ? {
-            isAdmin: cachedState.isAdmin,
-            isApproved: cachedState.isApproved,
-            loading: false,
-            userEmail: cachedState.userEmail || user.email || null,
-            error: null,
-          }
-        : {
-            isAdmin: false,
-            // Never deadlock the whole app behind a transient approval check.
-            // Admin-only surfaces still remain hidden unless the role check succeeds.
-            isApproved: true,
-            loading: false,
-            userEmail: user.email ?? null,
-            error: null,
-          };
+      const fallbackState = {
+        isAdmin: false,
+        isApproved: false,
+        loading: false,
+        userEmail: user.email ?? null,
+        error: error instanceof Error ? error.message : 'Unable to verify account permissions.',
+      };
 
       checkedUserIdRef.current = user.id;
       isInitialCheckDoneRef.current = true;

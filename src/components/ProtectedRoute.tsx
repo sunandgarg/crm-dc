@@ -70,16 +70,23 @@ export function ProtectedRoute({ children, requireAdmin = false }: ProtectedRout
     return <Navigate to="/auth" state={{ from: location }} replace />;
   }
 
-  const effectiveApproved = bootstrapTimedOut ? true : isApproved;
-  const effectiveAdmin = bootstrapTimedOut ? false : isAdmin;
+  if (bootstrapTimedOut) {
+    return (
+      <div className="min-h-screen bg-background flex flex-col items-center justify-center gap-4 p-4">
+        <AlertCircle className="h-12 w-12 text-destructive" />
+        <h2 className="text-lg font-semibold text-foreground">Authentication Check Timed Out</h2>
+        <button onClick={() => window.location.reload()} className="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90">Retry</button>
+      </div>
+    );
+  }
 
   // Check if user is approved
-  if (!effectiveApproved) {
+  if (!isApproved) {
     return <ApprovalPending email={userEmail || user.email || ''} />;
   }
 
   // Check admin requirement
-  if (requireAdmin && !effectiveAdmin) {
+  if (requireAdmin && !isAdmin) {
     return (
       <div className="min-h-screen bg-background flex flex-col items-center justify-center gap-4 p-4">
         <AlertCircle className="h-12 w-12 text-warning" />

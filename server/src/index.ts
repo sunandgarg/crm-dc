@@ -14,5 +14,8 @@ async function shutdown(signal: string) {
     process.exit(0);
   });
 }
+server.requestTimeout = 310_000;
+server.headersTimeout = 65_000;
+server.keepAliveTimeout = 60_000;
 process.on("SIGTERM", () => void shutdown("SIGTERM"));
 process.on("SIGINT", () => void shutdown("SIGINT"));

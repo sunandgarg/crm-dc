@@ -43,56 +43,9 @@ export default function UrlRedirect() {
       if (!code) { setError('Invalid URL'); return; }
 
       try {
-        let query = supabase
-          .from('url_mappings')
-          .select('id, original_url, is_active, expires_at, user_tracking')
-          .eq('short_code', code);
-
-        if (header) {
-          query = query.eq('header', header.toUpperCase());
-        } else {
-          query = query.is('header', null);
-        }
-
-        let { data: mapping } = await query.maybeSingle();
-
-        // Broader fallback
-        if (!mapping && !header) {
-          const { data } = await supabase
-            .from('url_mappings')
-            .select('id, original_url, is_active, expires_at, user_tracking')
-            .eq('short_code', code)
-            .maybeSingle();
-          mapping = data;
-        }
-
-        if (!mapping) {
-          // Check if it could be a header
-          if (params.codeOrHeader && !header) {
-            const { data: headerMatches } = await supabase
-              .from('url_mappings')
-              .select('id')
-              .eq('header', params.codeOrHeader.toUpperCase())
-              .limit(1);
-            if (!headerMatches?.length) {
-              navigate('/*', { replace: true });
-              return;
-            }
-          }
-          setError('URL not found');
-          return;
-        }
-
-        if (!mapping.is_active) { setError('This link has been deactivated'); return; }
-        if (mapping.expires_at && new Date(mapping.expires_at) < new Date()) {
-          setError('This link has expired');
-          return;
-        }
-
-        if (mapping.user_tracking !== false) {
-          void supabase.functions.invoke('url-redirect', { body: { code } });
-        }
-        window.location.replace(mapping.original_url);
+        const { data, error: redirectError } = await supabase.functions.invoke('url-redirect', { body: { code, header } });
+        if (redirectError || !data?.redirectTo) { setError('URL not found'); return; }
+        window.location.replace(data.redirectTo);
       } catch (e) {
         console.error('[UrlRedirect] Error:', e);
         setError('Something went wrong');

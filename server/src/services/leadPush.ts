@@ -1,5 +1,7 @@
 import type { Prisma } from "@prisma/client";
 import { prisma } from "../db.js";
+import { assertSafeOutboundUrl } from "./outboundUrl.js";
+import { logger } from "../logger.js";
 
 export interface ApiConfig {
   apiUrl: string;
@@ -230,10 +232,18 @@ export async function processLead(task: LeadTask): Promise<LeadPushResult> {
     const batch = await prisma.upload_batches.findUnique({ where: { id: task.batchId } });
     if (!batch || batch.is_paused || batch.is_cancelled || ["paused", "cancelled", "stopped"].includes(String(batch.status).toLowerCase())) return { success: false, status: "Cancelled", response: "Processing was stopped before this lead was sent", httpStatus: 0 };
   }
-  if (university?.daily_lead_limit && university.daily_pushed_count >= university.daily_lead_limit) return { success: false, status: "DLL_Blocked", response: `Daily lead limit reached (${university.daily_pushed_count}/${university.daily_lead_limit})`, httpStatus: 0 };
-
   const config = await hydrateConfig(task);
-  if (!/^https?:\/\//i.test(config.apiUrl)) throw new Error("University API URL is invalid");
+  await assertSafeOutboundUrl(config.apiUrl);
+  const dailyLimit = university?.daily_lead_limit ?? university?.daily_limit ?? null;
+  let reservedDailySlot = false;
+  if (university && dailyLimit && dailyLimit > 0) {
+    const startOfDay = new Date();
+    startOfDay.setUTCHours(0, 0, 0, 0);
+    await prisma.universities.updateMany({ where: { id: university.id, daily_count_reset_at: { lt: startOfDay } }, data: { daily_pushed_count: 0, daily_count_reset_at: new Date() } });
+    const reserved = await prisma.universities.updateMany({ where: { id: university.id, daily_pushed_count: { lt: dailyLimit } }, data: { daily_pushed_count: { increment: 1 } } });
+    if (!reserved.count) return { success: false, status: "DLL_Blocked", response: `Daily lead limit reached (${dailyLimit})`, httpStatus: 0 };
+    reservedDailySlot = true;
+  }
   const request = buildPartnerRequest(task.leadData, config);
   const timeoutMs = Math.min(300_000, Math.max(5_000, Number(config.apiTimeoutSeconds ?? 30) * 1000));
   const controller = new AbortController();
@@ -249,8 +259,12 @@ export async function processLead(task: LeadTask): Promise<LeadPushResult> {
     result = { success: false, status: "Fail", response: timeout ? `Partner API timed out after ${timeoutMs / 1000} seconds` : String(error), httpStatus: 0 };
   } finally { clearTimeout(timer); }
 
-  await recordResult(task, result);
-  if (result.status === "Success") await prisma.universities.update({ where: { id: task.universityId }, data: { daily_pushed_count: { increment: 1 } } });
+  try {
+    if (reservedDailySlot && result.status !== "Success") await prisma.universities.update({ where: { id: task.universityId }, data: { daily_pushed_count: { decrement: 1 } } });
+    if (!reservedDailySlot && result.status === "Success") await prisma.universities.update({ where: { id: task.universityId }, data: { daily_pushed_count: { increment: 1 } } });
+  } catch (error) { logger.error({ err: error, universityId: task.universityId }, "Daily lead counter could not be updated"); }
+  try { await recordResult(task, result); }
+  catch (error) { logger.error({ err: error, universityId: task.universityId, batchId: task.batchId }, "Partner result could not be persisted"); }
   return result;
 }
 

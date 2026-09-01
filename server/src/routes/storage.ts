@@ -13,12 +13,19 @@ const uploadSchema = z.object({
   sizeBytes: z.number().int().positive().max(50 * 1024 * 1024),
   scope: z.enum(['imports', 'documents', 'templates', 'exports']).default('documents'),
 });
+const allowedContentTypes = new Set([
+  'text/csv', 'text/plain', 'application/json', 'application/pdf',
+  'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'image/jpeg', 'image/png', 'image/webp',
+]);
 
 export const storageRouter = Router();
 storageRouter.use(requireAuth);
 
 storageRouter.post('/presign-upload', asyncRoute(async (request, response) => {
   const input = uploadSchema.parse(request.body);
+  if (!allowedContentTypes.has(input.contentType.toLowerCase())) throw new HttpError(400, 'File type is not allowed');
   const safeName = input.fileName.replace(/[^a-zA-Z0-9._-]+/g, '-');
   const objectKey = `${input.scope}/${new Date().toISOString().slice(0, 10)}/${randomUUID()}-${safeName}`;
   const asset = await prisma.fileAsset.create({

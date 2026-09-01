@@ -4,6 +4,10 @@ import type { PrismaClient } from "@prisma/client";
 import { prisma } from "../db.js";
 import { asyncRoute, HttpError } from "../http.js";
 import { optionalAuth } from "../middleware/auth.js";
+import { config } from "../config.js";
+import { z } from "zod";
+import type { AuthUser } from "../types.js";
+import { logger } from "../logger.js";
 
 const resources = new Set(`api_logs app_settings automation_logs automation_rules campaign_kpis campaign_recipients course_specializations crm_activities crm_contacts crm_tasks custom_column_values custom_columns custom_domains dlt_entities email_api_settings email_campaigns email_events email_recipients email_templates feature_toggles form_submissions funnel_campaign_contacts funnel_campaigns landing_pages lead_assignment_history lead_assignment_rules lead_capture_forms lead_events lead_push_cumulative_stats lead_push_daily_stats lead_scoring_rules lead_segment_members lead_segments leads marketing_campaigns marketing_custom_integrations marketing_integrations marketing_leads marketing_sequence_steps marketing_sequences marketing_templates marketing_workflows multi_push_presets pipeline_stages profiles programs smtp_campaigns smtp_domains smtp_email_logs smtp_link_clicks smtp_links smtp_suppression_list smtp_templates smtp_tracking_events state_cities team_members universities university_api_keys upload_batches url_api_keys url_bulk_imports url_clicks url_mappings user_permissions user_roles`.split(" "));
 
@@ -24,6 +28,48 @@ type QueryBody = {
   select?: string;
   onConflict?: string;
 };
+
+const querySchema = z.object({
+  action: z.enum(["select", "insert", "update", "upsert", "delete"]).default("select"),
+  data: z.unknown().optional(),
+  filters: z.array(z.object({ column: z.string().regex(/^(?:[a-zA-Z][a-zA-Z0-9_]*|__or)$/), operator: z.string().max(20), value: z.unknown() })).max(50).default([]),
+  order: z.array(z.object({ column: z.string().regex(/^[a-zA-Z][a-zA-Z0-9_]*$/), ascending: z.boolean().optional() })).max(10).optional(),
+  limit: z.number().int().min(1).max(config.MAX_QUERY_ROWS).default(config.MAX_QUERY_ROWS),
+  offset: z.number().int().min(0).max(1_000_000).optional(),
+  single: z.boolean().optional(), maybeSingle: z.boolean().optional(), count: z.literal("exact").optional(), head: z.boolean().optional(),
+  select: z.string().max(5000).optional(), onConflict: z.string().regex(/^[a-zA-Z][a-zA-Z0-9_]*$/).optional(),
+}).strict();
+
+const userReadable = new Set(["universities", "programs", "state_cities", "course_specializations", "custom_columns", "custom_column_values", "upload_batches", "app_settings", "feature_toggles"]);
+const userWritable = new Set(["upload_batches"]);
+const sensitiveUniversityFields = new Set(["secret_key", "auth_header_key", "auth_header_value", "custom_headers", "default_values", "column_mapping", "sample_csv_content"]);
+
+export function secureQuery(resource: string, input: QueryBody, user: AuthUser) {
+  const body = { ...input, filters: [...(input.filters ?? [])] };
+  const admin = ["admin", "super_admin"].includes(user.role);
+  if (!admin) {
+    if (!userReadable.has(resource)) throw new HttpError(403, "Resource access denied");
+    if (body.action !== "select" && !userWritable.has(resource)) throw new HttpError(403, "Resource is read-only");
+    if (resource === "upload_batches") {
+      body.filters.push({ column: "user_id", operator: "eq", value: user.id });
+      if (body.action === "insert") {
+        const rows = Array.isArray(body.data) ? body.data : [body.data];
+        const ownedRows = rows.map((row) => ({ ...(row as object), user_id: user.id }));
+        body.data = Array.isArray(input.data) ? ownedRows : ownedRows[0];
+      }
+      if (body.action === "upsert") throw new HttpError(403, "Upsert requires administrator access");
+    }
+    if (resource === "app_settings" && !body.filters.some((filter) => filter.column === "key" && filter.operator === "eq" && filter.value === "rate_limit_config")) throw new HttpError(403, "Setting access denied");
+  }
+  if (["update", "delete"].includes(body.action ?? "select") && !body.filters.length) throw new HttpError(400, "A filtered mutation is required");
+  return { body, admin };
+}
+
+function redactUniversity(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(redactUniversity);
+  if (!value || typeof value !== "object") return value;
+  return Object.fromEntries(Object.entries(value).filter(([key]) => !sensitiveUniversityFields.has(key)).map(([key, item]) => [key, redactUniversity(item)]));
+}
 
 function ensureResource(resource: string) {
   if (!resources.has(resource)) throw new HttpError(404, `Unknown data resource: ${resource}`);
@@ -131,7 +177,7 @@ async function firstClass(resource: string, body: QueryBody) {
 }
 
 async function flexible(resource: string, body: QueryBody) {
-  const existing = await prisma.resourceRecord.findMany({ where: { resource }, orderBy: { created_at: "desc" } });
+  const existing = await prisma.resourceRecord.findMany({ where: { resource }, orderBy: { created_at: "desc" }, take: config.MAX_FLEXIBLE_SCAN_ROWS });
   const matching = existing.filter((row) => payloadMatches(row.payload as Record<string, unknown>, body.filters));
   const rows = Array.isArray(body.data) ? body.data : [body.data];
   if (body.action === "insert") {
@@ -177,9 +223,12 @@ dataRouter.use(optionalAuth);
 dataRouter.post("/:resource/query", asyncRoute(async (request, response) => {
   const resource = String(request.params.resource);
   ensureResource(resource);
-  if (!request.user && resource !== "url_mappings") throw new HttpError(401, "Authentication required");
-  const body = request.body as QueryBody;
-  const result = delegates.has(resource) ? await firstClass(resource, body) : await flexible(resource, body);
+  if (!request.user) throw new HttpError(401, "Authentication required");
+  const parsed = querySchema.parse(request.body) as QueryBody;
+  const { body, admin } = secureQuery(resource, parsed, request.user);
+  let result = delegates.has(resource) ? await firstClass(resource, body) : await flexible(resource, body);
+  if (!admin && resource === "universities") result = redactUniversity(result);
+  if (body.action !== "select") await prisma.auditLog.create({ data: { actor_id: request.user.id, action: `data.${body.action}`, resource, ip_address: request.ip, after: { filter_count: body.filters?.length ?? 0 } } }).catch((error) => logger.error({ err: error, resource, action: body.action }, "Data mutation audit could not be persisted"));
   const wrapped = result && typeof result === "object" && "data" in result ? result : { data: result, count: null };
   response.json(wrapped);
 }));

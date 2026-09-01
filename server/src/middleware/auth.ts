@@ -3,9 +3,10 @@ import jwt from 'jsonwebtoken';
 import { config } from '../config.js';
 import type { AuthenticatedRequest, AuthUser } from '../types.js';
 import { HttpError } from '../http.js';
+import { prisma } from '../db.js';
 
 export function signToken(user: AuthUser): string {
-  return jwt.sign(user, config.JWT_SECRET, { expiresIn: '12h', issuer: 'crm-dc' });
+  return jwt.sign(user, config.JWT_SECRET, { expiresIn: `${config.SESSION_TTL_HOURS}h`, issuer: 'crm-dc', audience: 'crm-dc-web' });
 }
 
 export function readToken(request: AuthenticatedRequest): AuthUser | null {
@@ -13,19 +14,26 @@ export function readToken(request: AuthenticatedRequest): AuthUser | null {
   const token = header?.startsWith('Bearer ') ? header.slice(7) : null;
   if (!token) return null;
   try {
-    return jwt.verify(token, config.JWT_SECRET, { issuer: 'crm-dc' }) as AuthUser;
+    return jwt.verify(token, config.JWT_SECRET, { issuer: 'crm-dc', audience: 'crm-dc-web' }) as AuthUser;
   } catch {
     return null;
   }
 }
 
-export function optionalAuth(request: AuthenticatedRequest, _response: Response, next: NextFunction) {
-  request.user = readToken(request) ?? undefined;
-  next();
+async function freshUser(request: AuthenticatedRequest) {
+  const tokenUser = readToken(request);
+  if (!tokenUser) return undefined;
+  const user = await prisma.appUser.findUnique({ where: { id: tokenUser.id } });
+  if (!user?.is_active || !user.is_approved || user.session_version !== tokenUser.sessionVersion) return undefined;
+  return { id: user.id, email: user.email, role: user.role, full_name: user.full_name, sessionVersion: user.session_version };
 }
 
-export function requireAuth(request: AuthenticatedRequest, _response: Response, next: NextFunction) {
-  request.user = readToken(request) ?? undefined;
+export async function optionalAuth(request: AuthenticatedRequest, _response: Response, next: NextFunction) {
+  try { request.user = await freshUser(request); next(); } catch (error) { next(error); }
+}
+
+export async function requireAuth(request: AuthenticatedRequest, _response: Response, next: NextFunction) {
+  try { request.user = await freshUser(request); } catch (error) { return next(error); }
   if (!request.user) return next(new HttpError(401, 'Authentication required'));
   next();
 }
