@@ -16,7 +16,8 @@ export default function Auth() {
   const [developmentCode, setDevelopmentCode] = useState<string | null>(null);
   const navigate = useNavigate();
   const location = useLocation();
-  const from = (location.state as { from?: { pathname: string } })?.from?.pathname || '/';
+  const requestedPath = (location.state as { from?: { pathname: string } })?.from?.pathname;
+  const from = requestedPath?.startsWith('/crm/') ? requestedPath : '/crm/lead-management';
 
   const checkExistingSession = useCallback(async () => {
     const { data } = await supabase.auth.getSession();

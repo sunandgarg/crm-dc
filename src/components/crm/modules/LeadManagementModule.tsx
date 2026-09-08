@@ -1,5 +1,4 @@
 import { memo, useState, useMemo, useCallback, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
@@ -13,7 +12,7 @@ import { Label } from '@/components/ui/label';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuCheckboxItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import {
-  ArrowLeft, Plus, Search, Download, Upload, LayoutGrid, List,
+  Plus, Search, Download, Upload, LayoutGrid, List,
   Phone, Mail, MessageSquare, Star, ChevronDown, SlidersHorizontal, Users, Loader2,
   Clock3, CalendarClock, UserRoundCog, FileSpreadsheet
 } from 'lucide-react';
@@ -48,7 +47,6 @@ interface LeadManagementModuleProps {
 }
 
 export function LeadManagementModule({ universities }: LeadManagementModuleProps) {
-  const navigate = useNavigate();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { user } = useAuth();
@@ -256,9 +254,6 @@ export function LeadManagementModule({ universities }: LeadManagementModuleProps
   return (
     <div className="container mx-auto px-4 py-6">
       <div className="mb-6">
-        <Button variant="ghost" size="sm" onClick={() => navigate('/crm')} className="mb-3 -ml-2 text-muted-foreground hover:text-foreground">
-          <ArrowLeft className="h-4 w-4 mr-1" /> Back to CRM Hub
-        </Button>
         <div className="flex items-center justify-between flex-wrap gap-4">
           <div>
             <h1 className="text-2xl font-bold flex items-center gap-2"><Users className="h-6 w-6 text-blue-500" /> Smart Lead Manager</h1>

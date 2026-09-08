@@ -1,5 +1,4 @@
 import { memo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
@@ -11,13 +10,12 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import {
-  ArrowLeft, Settings2, Plus, Trash2, GripVertical,
+  Settings2, Plus, Trash2, GripVertical,
   GitBranch, Database, Loader2
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 export function CRMConfigSettings() {
-  const navigate = useNavigate();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState('pipeline');
@@ -110,9 +108,6 @@ export function CRMConfigSettings() {
   return (
     <div className="container mx-auto px-4 py-6">
       <div className="mb-6">
-        <Button variant="ghost" size="sm" onClick={() => navigate('/crm')} className="mb-3 -ml-2 text-muted-foreground hover:text-foreground">
-          <ArrowLeft className="h-4 w-4 mr-1" /> Back to CRM Hub
-        </Button>
         <h1 className="text-2xl font-bold flex items-center gap-2">
           <Settings2 className="h-6 w-6 text-emerald-500" /> CRM Configuration
         </h1>

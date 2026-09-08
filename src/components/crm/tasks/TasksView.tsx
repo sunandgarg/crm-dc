@@ -62,7 +62,7 @@ export function TasksView() {
     try {
       const [tasksRes, contactsRes] = await Promise.all([
         supabase.from('crm_tasks').select('*').order('due_date', { ascending: true }).limit(500),
-        supabase.from('crm_contacts').select('id, name, mobile').order('name').limit(1000),
+        supabase.from('crm_contacts').select('id, name, mobile').order('name').limit(500),
       ]);
 
       // Enrich tasks with contact info

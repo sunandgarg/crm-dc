@@ -109,7 +109,7 @@ const Index = () => {
   // Parse route to get active tab and sub-routes
   const { activeTab, subRoute, universitySlug } = useMemo(() => {
     const pathParts = location.pathname.split('/').filter(Boolean);
-    const tab = pathParts[0] || 'dashboard';
+    const tab = pathParts[0] || 'crm';
     const sub = pathParts[1] || null;
     const uniSlug = tab === 'lead-push' && sub === 'upload' ? pathParts[2] : null;
 
@@ -196,7 +196,7 @@ const Index = () => {
     const isAllowedUserRoute = activeTab === 'lead-push' && subRoute && userAllowedLeadPushRoutes.has(subRoute);
 
     if (!isAllowedUserRoute) {
-      navigate('/lead-push/upload', { replace: true });
+      navigate('/crm/lead-management', { replace: true });
     }
   }, [activeTab, subRoute, isAdmin, adminAuthLoading, navigate]);
 
@@ -818,7 +818,7 @@ const Index = () => {
   return (
     <div className="min-h-screen bg-background">
       <Header />
-      <TabNavigation activeTab={activeTab} onTabChange={handleTabChange} isAdmin={isAdmin} />
+      <TabNavigation />
 
       {startupError && (
         <div className="mx-4 mt-4 flex flex-col gap-3 rounded-lg border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive sm:flex-row sm:items-center sm:justify-between">

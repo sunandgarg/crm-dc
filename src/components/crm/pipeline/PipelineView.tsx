@@ -68,10 +68,10 @@ export function PipelineView({ universities }: PipelineViewProps) {
       const stagesRes = await supabase.from('pipeline_stages').select('*').order('sort_order');
       setStages(stagesRes.data || []);
       
-      // Fetch contacts in batches to bypass 1000-row limit
+      // Fetch contacts in bounded batches so large pipelines remain responsive.
       let allContacts: Contact[] = [];
       let from = 0;
-      const batchSize = 1000;
+      const batchSize = 500;
       while (true) {
         const { data, error } = await supabase
           .from('crm_contacts')

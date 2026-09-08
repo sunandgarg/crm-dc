@@ -6,7 +6,6 @@ import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigationType 
 import { Component, useEffect, useRef, memo, Suspense, lazy, forwardRef, type ReactNode } from "react";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 import { appCache } from "@/hooks/useAppCache";
-import { useAdminAuth } from "@/hooks/useAdminAuth";
 
 const CHUNK_RELOAD_KEY = "app:chunk-reload-at";
 
@@ -61,7 +60,6 @@ function lazyWithRetry<T extends { default: React.ComponentType<any> }>(
 
 const Auth = lazyWithRetry(() => import("./pages/Auth"));
 const NotFound = lazyWithRetry(() => import("./pages/NotFound"));
-const TelecallerApp = lazyWithRetry(() => import("./pages/TelecallerApp"));
 const UrlRedirect = lazyWithRetry(() => import("./pages/UrlRedirect"));
 const Index = lazyWithRetry(() => import("./pages/Index"));
 // Optimized QueryClient with aggressive caching
@@ -135,7 +133,7 @@ class AppErrorBoundary extends Component<{ children: ReactNode }, { hasError: bo
       console.warn("[App] Could not clear recoverable cache:", error);
     }
 
-    window.location.assign("/lead-push/upload");
+    window.location.assign("/crm/lead-management");
   };
 
   render() {
@@ -146,7 +144,7 @@ class AppErrorBoundary extends Component<{ children: ReactNode }, { hasError: bo
         <div className="w-full max-w-xl rounded-2xl border border-destructive/30 bg-card p-8 text-center shadow-sm">
           <h1 className="text-2xl font-semibold text-foreground">App recovered from a page error</h1>
           <p className="mt-3 text-sm text-muted-foreground">
-            This can happen when the browser has old upload or route cache after a deployment. Resetting cache keeps your login and reloads Lead Push cleanly.
+            This can happen when the browser has old route cache after a deployment. Resetting cache keeps your login and reloads the CRM workspace cleanly.
           </p>
           {this.state.message && (
             <p className="mt-4 break-words rounded-lg bg-destructive/10 p-3 text-xs text-destructive">
@@ -172,15 +170,6 @@ function ProtectedLayout() {
 }
 
 const StableProtectedLayout = memo(ProtectedLayout);
-
-function AdminOnlyRoute({ children }: { children: React.ReactNode }) {
-  const { isAdmin, loading } = useAdminAuth();
-
-  if (loading) return <LoadingFallback />;
-  if (!isAdmin) return <Navigate to="/lead-push/upload" replace />;
-
-  return <>{children}</>;
-}
 
 // Route state saver - handles persistence WITHOUT triggering refetches
 function RouteStateSaver() {
@@ -243,47 +232,25 @@ function AppRoutes() {
           {/* Auth route */}
           <Route path="/auth" element={<Auth />} />
 
-          {/* Telecaller Mobile App */}
-          <Route
-            path="/telecaller"
-            element={
-              <ProtectedRoute>
-                <AdminOnlyRoute>
-                  <TelecallerApp />
-                </AdminOnlyRoute>
-              </ProtectedRoute>
-            }
-          />
-
-          {/* Legacy redirects */}
-          <Route path="/" element={<Navigate to="/lead-push/upload" replace />} />
-          <Route path="/universities" element={<Navigate to="/lead-push/upload" replace />} />
-          <Route path="/upload" element={<Navigate to="/lead-push/upload" replace />} />
-          <Route path="/history" element={<Navigate to="/lead-push/upload" replace />} />
-          <Route path="/logs" element={<Navigate to="/lead-push/upload" replace />} />
-          <Route path="/marketing" element={<Navigate to="/lead-push/upload" replace />} />
-          <Route path="/marketing/*" element={<Navigate to="/lead-push/upload" replace />} />
-
-          {/*
-            FIX: "Page refreshes on every click"
-            Previously each path had its OWN <Route element={<StableProtectedLayout />} />.
-            React Router v6 treats those as distinct route nodes, so navigating between
-            them unmounts and remounts the entire Index tree - re-running every effect,
-            re-fetching universities/logs, and flashing the loading state.
-            We now mount Index ONCE per top-level section via wildcard (`/*`) routes.
-            Index reads `useLocation()` internally to render the right view, so the
-            same instance is preserved across all sub-navigations.
-          */}
-          <Route path="/all-leads" element={<StableProtectedLayout />} />
-          <Route path="/dashboard" element={<StableProtectedLayout />} />
-          <Route path="/lead-push/*" element={<StableProtectedLayout />} />
+          {/* CRM is the single authenticated workspace. */}
+          <Route path="/" element={<Navigate to="/crm/lead-management" replace />} />
+          <Route path="/universities" element={<Navigate to="/crm/lead-management" replace />} />
+          <Route path="/upload" element={<Navigate to="/crm/lead-management" replace />} />
+          <Route path="/history" element={<Navigate to="/crm/lead-management" replace />} />
+          <Route path="/logs" element={<Navigate to="/crm/lead-management" replace />} />
+          <Route path="/marketing" element={<Navigate to="/crm/lead-management" replace />} />
+          <Route path="/marketing/*" element={<Navigate to="/crm/lead-management" replace />} />
           <Route path="/crm/*" element={<StableProtectedLayout />} />
-          <Route path="/connections/*" element={<StableProtectedLayout />} />
-          <Route path="/automation/*" element={<StableProtectedLayout />} />
-          <Route path="/settings/*" element={<StableProtectedLayout />} />
-          <Route path="/telecaller-mgmt" element={<StableProtectedLayout />} />
-          <Route path="/url-shortener/*" element={<StableProtectedLayout />} />
-          <Route path="/uni-tracker" element={<StableProtectedLayout />} />
+          <Route path="/all-leads" element={<Navigate to="/crm/lead-management" replace />} />
+          <Route path="/dashboard" element={<Navigate to="/crm/analytics" replace />} />
+          <Route path="/lead-push/*" element={<Navigate to="/crm/lead-management" replace />} />
+          <Route path="/connections/*" element={<Navigate to="/crm/settings" replace />} />
+          <Route path="/automation/*" element={<Navigate to="/crm/settings" replace />} />
+          <Route path="/settings/*" element={<Navigate to="/crm/settings" replace />} />
+          <Route path="/telecaller" element={<Navigate to="/crm/team" replace />} />
+          <Route path="/telecaller-mgmt" element={<Navigate to="/crm/team" replace />} />
+          <Route path="/url-shortener/*" element={<Navigate to="/crm/lead-management" replace />} />
+          <Route path="/uni-tracker" element={<Navigate to="/crm/analytics" replace />} />
 
           {/* URL Redirect - public route for short URLs */}
           {/* Supports: /{code}, /{HEADER}/{code} */}

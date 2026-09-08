@@ -50,7 +50,7 @@ export function CRMDashboard({ universities: _universities }: CRMDashboardProps)
   const fetchDashboardData = useCallback(async () => {
     try {
       const [contactsRes, stagesRes, activitiesRes, tasksRes] = await Promise.all([
-        supabase.from('crm_contacts').select('id, created_at, stage_id', { count: 'exact' }).limit(1000),
+        supabase.from('crm_contacts').select('id, created_at, stage_id', { count: 'exact' }).limit(500),
         supabase.from('pipeline_stages').select('*').order('sort_order'),
         supabase.from('crm_activities').select('*').order('created_at', { ascending: false }).limit(10),
         supabase.from('crm_tasks').select('id, status, due_date'),
