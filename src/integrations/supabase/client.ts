@@ -131,7 +131,14 @@ export const supabase: any = {
       } catch (error) { return { data: { session: null, user: null }, error }; }
     },
     signInWithOtp: async ({ email }: { email: string }) => supabase.auth.requestOtp({ email }),
-    signInWithPassword: async () => ({ data: { session: null, user: null }, error: new Error('Password login is disabled. Use the email verification code.') }),
+    signInWithPassword: async ({ email, password }: { email: string; password: string }) => {
+      try {
+        const value = await apiFetch('/api/auth/sign-in-password', { method: 'POST', body: JSON.stringify({ email, password }) });
+        const session = { access_token: value.token, token_type: 'bearer', expires_in: value.expiresIn, expires_at: Math.floor(Date.now() / 1000) + value.expiresIn, user: userFromSession({ user: value.user }) };
+        storeSession(session);
+        return { data: { session, user: session.user }, error: null };
+      } catch (error) { return { data: { session: null, user: null }, error }; }
+    },
     getSession: async () => ({ data: { session: readSession() }, error: null }),
     getUser: async () => ({ data: { user: userFromSession(readSession()) }, error: null }),
     refreshSession: async () => ({ data: { session: readSession(), user: userFromSession(readSession()) }, error: null }),

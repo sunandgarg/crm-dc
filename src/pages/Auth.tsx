@@ -7,6 +7,8 @@ import { supabase } from '@/integrations/supabase/client';
 export default function Auth() {
   const [email, setEmail] = useState('');
   const [code, setCode] = useState('');
+  const [password, setPassword] = useState('');
+  const [method, setMethod] = useState<'password' | 'otp'>('password');
   const [step, setStep] = useState<'email' | 'code'>('email');
   const [loading, setLoading] = useState(false);
   const [checkingSession, setCheckingSession] = useState(true);
@@ -55,6 +57,18 @@ export default function Auth() {
     if (verifyError) setError(verifyError.message || 'Invalid or expired verification code');
   };
 
+  const signInWithPassword = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setError(null);
+    const normalized = email.trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized)) return setError('Enter a valid email address');
+    if (password.length < 8) return setError('Password must be at least 8 characters');
+    setLoading(true);
+    const { error: signInError } = await supabase.auth.signInWithPassword({ email: normalized, password });
+    setLoading(false);
+    if (signInError) setError(signInError.message || 'Invalid email or password');
+  };
+
   if (checkingSession) return <div className="min-h-screen bg-background flex flex-col items-center justify-center gap-4"><Loader2 className="h-8 w-8 animate-spin text-primary" /><p className="text-sm text-muted-foreground">Checking your session...</p></div>;
 
   return (
@@ -64,14 +78,22 @@ export default function Auth() {
           <div className="mb-8 flex justify-center"><img src={logo} alt="DekhoCampus" className="h-16 w-auto" /></div>
           <div className="mb-6">
             <h1 className="text-xl font-semibold text-foreground">{step === 'email' ? 'Sign in to CRM' : 'Check your email'}</h1>
-            <p className="mt-1 text-sm text-muted-foreground">{step === 'email' ? 'A secure verification code will be sent by email.' : `Enter the code sent to ${email}.`}</p>
+            <p className="mt-1 text-sm text-muted-foreground">{step === 'email' ? (method === 'password' ? 'Use your approved CRM account credentials.' : 'A secure verification code will be sent by email.') : `Enter the code sent to ${email}.`}</p>
           </div>
+
+          {step === 'email' && <div className="mb-5 grid grid-cols-2 rounded-md bg-muted p-1" role="tablist" aria-label="Sign-in method"><button type="button" role="tab" aria-selected={method === 'password'} onClick={() => { setMethod('password'); setError(null); }} className={`rounded px-3 py-2 text-sm font-medium ${method === 'password' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground'}`}>Password</button><button type="button" role="tab" aria-selected={method === 'otp'} onClick={() => { setMethod('otp'); setError(null); }} className={`rounded px-3 py-2 text-sm font-medium ${method === 'otp' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground'}`}>Email code</button></div>}
 
           {error && <div className="mb-5 flex items-start gap-3 rounded-md border border-destructive/20 bg-destructive/10 p-3"><AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-destructive" /><p className="flex-1 text-sm text-destructive">{error}</p><button type="button" onClick={() => setError(null)} aria-label="Dismiss error" className="text-destructive">x</button></div>}
 
           {developmentCode && <div className="mb-5 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">Development code: <strong className="font-mono">{developmentCode}</strong></div>}
 
-          {step === 'email' ? (
+          {step === 'email' && method === 'password' ? (
+            <form onSubmit={signInWithPassword} className="space-y-5">
+              <div><label className="mb-2 block text-sm font-medium text-foreground">Work email</label><div className="relative"><Mail className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground" /><input type="email" value={email} onChange={(event) => setEmail(event.target.value)} className="input-field pl-11" placeholder="you@company.com" autoComplete="email" disabled={loading} autoFocus /></div></div>
+              <div><label className="mb-2 block text-sm font-medium text-foreground">Password</label><div className="relative"><KeyRound className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground" /><input type="password" value={password} onChange={(event) => setPassword(event.target.value)} className="input-field pl-11" autoComplete="current-password" disabled={loading} /></div></div>
+              <button type="submit" disabled={loading} className="btn-primary flex w-full items-center justify-center gap-2">{loading ? <Loader2 className="h-5 w-5 animate-spin" /> : <><LogIn className="h-5 w-5" />Sign in</>}</button>
+            </form>
+          ) : step === 'email' ? (
             <form onSubmit={requestCode} className="space-y-5">
               <div><label className="mb-2 block text-sm font-medium text-foreground">Work email</label><div className="relative"><Mail className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground" /><input type="email" value={email} onChange={(event) => setEmail(event.target.value)} className="input-field pl-11" placeholder="you@company.com" autoComplete="email" disabled={loading} autoFocus /></div></div>
               <button type="submit" disabled={loading} className="btn-primary flex w-full items-center justify-center gap-2">{loading ? <Loader2 className="h-5 w-5 animate-spin" /> : <><Mail className="h-5 w-5" />Send code</>}</button>

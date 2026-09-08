@@ -12,9 +12,15 @@ import { integrationReadiness } from "../services/readiness.js";
 import { assertSafeOutboundUrl } from "../services/outboundUrl.js";
 import { rateLimit } from "../middleware/rateLimit.js";
 import { config as serverConfig } from "../config.js";
+import { hash } from "bcryptjs";
 
 export const functionsRouter = Router();
 functionsRouter.use(requireAuth);
+
+function safeUser<T extends { password_hash?: string | null }>(user: T) {
+  const { password_hash: _passwordHash, ...safe } = user;
+  return safe;
+}
 
 functionsRouter.post("/process-lead", rateLimit("process-lead", 60_000, serverConfig.PROCESS_RATE_LIMIT_PER_MINUTE, (request) => request.header("authorization")?.slice(-24) || request.ip || "unknown"), asyncRoute(async (request, response) => {
   const body = request.body as LeadTask & { tasks?: LeadTask[]; concurrency?: number };
@@ -86,19 +92,19 @@ functionsRouter.post("/admin-user-management", requireAdmin, asyncRoute(async (r
     const users = await prisma.appUser.findMany({ orderBy: { created_at: "desc" } });
     const roles = await prisma.user_roles.findMany();
     const permissionRows = await prisma.user_permissions.findMany();
-    return response.json({ users: users.map((user) => ({ ...user, roles: [user.role, ...roles.filter((item) => item.user_id === user.id).map((item) => item.role)], permissions: permissionRows.filter((item) => item.user_id === user.id).map((item) => item.permission) })) });
+    return response.json({ users: users.map((user) => ({ ...safeUser(user), roles: [user.role, ...roles.filter((item) => item.user_id === user.id).map((item) => item.role)], permissions: permissionRows.filter((item) => item.user_id === user.id).map((item) => item.permission) })) });
   }
   if (action === "create_user") {
     const normalizedEmail = String(email || "").toLowerCase();
     if (!normalizedEmail) throw new HttpError(400, "email is required");
     const existing = await prisma.appUser.findUnique({ where: { email: normalizedEmail } });
     const user = await prisma.appUser.upsert({ where: { email: normalizedEmail }, create: { email: normalizedEmail, full_name: fullName, role: role || "counsellor" }, update: { full_name: fullName, role: role || existing?.role, is_active: true, is_approved: true } });
-    return response.json({ user, created: !existing, authentication: "email_otp" });
+    return response.json({ user: safeUser(user), created: !existing, authentication: "password_or_email_otp" });
   }
   if (!userId) throw new HttpError(400, "user_id is required");
-  if (action === "approve_user") return response.json({ user: await prisma.appUser.update({ where: { id: userId }, data: { is_approved: true, is_active: true } }) });
-  if (action === "revoke_user") return response.json({ user: await prisma.appUser.update({ where: { id: userId }, data: { is_approved: false, session_version: { increment: 1 } } }) });
-  if (action === "update_role") return response.json({ user: await prisma.appUser.update({ where: { id: userId }, data: { role: newRole || role, session_version: { increment: 1 } } }) });
+  if (action === "approve_user") return response.json({ user: safeUser(await prisma.appUser.update({ where: { id: userId }, data: { is_approved: true, is_active: true } })) });
+  if (action === "revoke_user") return response.json({ user: safeUser(await prisma.appUser.update({ where: { id: userId }, data: { is_approved: false, session_version: { increment: 1 } } })) });
+  if (action === "update_role") return response.json({ user: safeUser(await prisma.appUser.update({ where: { id: userId }, data: { role: newRole || role, session_version: { increment: 1 } } })) });
   if (action === "update_permissions") {
     await prisma.user_permissions.deleteMany({ where: { user_id: userId } });
     await prisma.user_permissions.createMany({ data: (permissions as string[]).map((permission) => ({ user_id: userId, permission, granted_by: request.user!.id })) });
@@ -108,7 +114,12 @@ functionsRouter.post("/admin-user-management", requireAdmin, asyncRoute(async (r
     await prisma.appUser.update({ where: { id: userId }, data: { session_version: { increment: 1 } } });
     return response.json({ success: true });
   }
-  if (action === "change_password") return response.json({ success: true, note: "Passwords are not stored; this deployment uses AWS SES email OTP" });
+  if (action === "change_password") {
+    const password = String(request.body?.password || request.body?.new_password || "");
+    if (password.length < 8 || password.length > 128) throw new HttpError(400, "Password must be between 8 and 128 characters");
+    await prisma.appUser.update({ where: { id: userId }, data: { password_hash: await hash(password, 12), session_version: { increment: 1 } } });
+    return response.json({ success: true });
+  }
   throw new HttpError(400, `Unknown admin action: ${action}`);
 }));
 

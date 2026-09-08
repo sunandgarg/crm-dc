@@ -5,12 +5,29 @@ import { asyncRoute, HttpError } from '../http.js';
 import { config, isProduction } from '../config.js';
 import { generateOtp, hashOtp, sendOtpEmail, verifyOtpHash } from '../services/otp.js';
 import { requireAuth, signToken } from '../middleware/auth.js';
+import { compare } from 'bcryptjs';
 
 const requestSchema = z.object({ email: z.string().trim().email().transform((value) => value.toLowerCase()) });
 const verifySchema = requestSchema.extend({ code: z.string().regex(/^\d{6}$/) });
+const passwordSchema = requestSchema.extend({ password: z.string().min(8).max(128) });
 const recentRequests = new Map<string, number[]>();
 
 export const authRouter = Router();
+
+function sessionResponse(user: { id: string; email: string; role: string; full_name: string | null; session_version: number }) {
+  const authUser = { id: user.id, email: user.email, role: user.role, full_name: user.full_name, sessionVersion: user.session_version };
+  return { token: signToken(authUser), user: authUser, expiresIn: config.SESSION_TTL_HOURS * 3600 };
+}
+
+authRouter.post('/sign-in-password', asyncRoute(async (request, response) => {
+  const { email, password } = passwordSchema.parse(request.body);
+  const user = await prisma.appUser.findUnique({ where: { email } });
+  if (!user?.is_active || !user.is_approved || !user.password_hash || !(await compare(password, user.password_hash))) {
+    throw new HttpError(401, 'Invalid email or password');
+  }
+  await prisma.appUser.update({ where: { id: user.id }, data: { last_sign_in_at: new Date() } });
+  response.json(sessionResponse(user));
+}));
 
 authRouter.post('/request-otp', asyncRoute(async (request, response) => {
   const { email } = requestSchema.parse(request.body);
@@ -75,8 +92,7 @@ authRouter.post('/verify-otp', asyncRoute(async (request, response) => {
     }),
   ]);
 
-  const authUser = { id: user.id, email: user.email, role: user.role, full_name: user.full_name, sessionVersion: user.session_version };
-  response.json({ token: signToken(authUser), user: authUser, expiresIn: config.SESSION_TTL_HOURS * 3600 });
+  response.json(sessionResponse(user));
 }));
 
 authRouter.get('/me', requireAuth, asyncRoute(async (request, response) => {

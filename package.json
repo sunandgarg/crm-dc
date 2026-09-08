@@ -20,6 +20,7 @@
     "db:migrate": "prisma migrate deploy",
     "db:migrate:dev": "prisma migrate dev",
     "db:seed": "tsx prisma/seed.ts",
+    "admin:provision": "tsx scripts/provision-admin.ts",
     "db:studio": "prisma studio",
     "test": "vitest run",
     "check": "pnpm lint && pnpm test && pnpm build",

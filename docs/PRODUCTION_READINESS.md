@@ -5,6 +5,7 @@
 1. Set `NODE_ENV=production`, an HTTPS `APP_URL`, and a random `JWT_SECRET` of at least 48 characters.
 2. Configure PostgreSQL with automated point-in-time recovery and run `pnpm db:migrate` as a release step.
 3. Set `BOOTSTRAP_ADMIN_EMAIL`, run `pnpm db:seed` once, then remove bootstrap permissions from routine deployments.
+   To enable password login for an approved administrator, run `ADMIN_EMAIL=... ADMIN_PASSWORD=... ADMIN_NAME=... pnpm admin:provision` from a protected operator shell. The password is stored only as a bcrypt hash.
 4. Verify an AWS SES identity and set `SES_FROM_EMAIL` plus AWS credentials or workload identity.
 5. Configure S3 or R2 private storage. Production startup rejects `STORAGE_PUBLIC_BASE_URL`.
 6. Configure all webhook secrets and `INBOUND_API_KEY`; rotate any values that were used outside the secret manager.
