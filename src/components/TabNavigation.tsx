@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Activity, BarChart3, ChevronDown, ListTodo, Settings, SlidersHorizontal, Users, Workflow } from 'lucide-react';
+import { Activity, BarChart3, ChevronDown, ListTodo, Settings, SlidersHorizontal, UploadCloud, Users, Workflow } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 
 const sections = [
@@ -10,6 +10,7 @@ const sections = [
   { route: '/crm/analytics', label: 'Analytics', icon: BarChart3 },
   { route: '/crm/team', label: 'Team', icon: SlidersHorizontal },
   { route: '/crm/settings', label: 'Setup', icon: Settings },
+  { route: '/lead-push/upload', label: 'Lead Push', icon: UploadCloud },
 ];
 
 export function TabNavigation() {

@@ -122,8 +122,8 @@ export function DashboardTab() {
 
       setUniversities(unis || []);
       const uniMap = new Map((unis || []).map(u => [u.id, u.name]));
-      const profileMap = new Map((profiles || []).map(p => [p.id, p]));
-      const batchMap = new Map((batches || []).map(b => [b.id, b]));
+      const profileMap = new Map<string, { id: string; email?: string | null; full_name?: string | null }>((profiles || []).map((profile: any) => [profile.id, profile]));
+      const batchMap = new Map<string, { id: string; file_name?: string | null }>((batches || []).map((batch: any) => [batch.id, batch]));
 
       const success = filtered.filter(l => isSuccess(l.status)).length;
       const failed = filtered.filter(l => isFailed(l.status)).length;

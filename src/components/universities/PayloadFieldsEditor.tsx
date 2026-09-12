@@ -737,8 +737,11 @@ export function columnMappingToPayloadFields(mapping: Record<string, string>): P
           ...config,
           fieldName,
           displayName: stringifyPayloadFieldValue(config.displayName) || fieldName,
+          sourceType: config.sourceType || "lead_data",
           sourceKey: stringifyPayloadFieldValue(config.sourceKey) || undefined,
           staticValue: stringifyPayloadFieldValue(config.staticValue) || undefined,
+          isRequired: Boolean(config.isRequired),
+          sortOrder: typeof config.sortOrder === "number" ? config.sortOrder : fields.length,
         });
       } catch {
         // Ignore invalid JSON

@@ -20,9 +20,20 @@ model AppUser {
   updated_at      DateTime      @updatedAt @db.Timestamptz(6)
   session_version Int           @default(0)
   password_hash   String?
+  team_id         String?       @db.Uuid
   otp_codes       OtpCode[]
   audit_logs      AuditLog[]
+  crm_team        crm_teams?    @relation("TeamMembers", fields: [team_id], references: [id], onDelete: SetNull)
+  managed_teams   crm_teams[]   @relation("TeamManager")
+  owned_contacts  crm_contacts[] @relation("ContactOwner")
+  assigned_tasks  crm_tasks[]   @relation("TaskAssignee")
+  created_activities crm_activities[] @relation("ActivityActor")
+  saved_views     crm_saved_views[]
+  assignment_changes crm_assignment_history[] @relation("AssignmentChangedBy")
+  assignments_from crm_assignment_history[] @relation("AssignmentFromOwner")
+  assignments_to crm_assignment_history[] @relation("AssignmentToOwner")
 
+  @@index([team_id, is_active])
   @@map("app_users")
 }
 
@@ -210,6 +221,7 @@ model crm_contacts {
   lead_id                  String?   @db.Uuid
   university_id            String?   @db.Uuid
   stage_id                 String?   @db.Uuid
+  owner_id                 String?   @db.Uuid
   name                     String
   email                    String?
   mobile                   String
@@ -219,15 +231,22 @@ model crm_contacts {
   course                   String?
   specialization           String?
   source                   String?
+  medium                   String?
+  campaign_name            String?
   priority                 String?   @default("Medium")
   tags                     String[]  @default([])
   lead_score               Int?      @default(50)
   lead_quality             String?
   lead_score_updated_at    DateTime? @db.Timestamptz(6)
   assigned_to              String?
+  is_favourite             Boolean   @default(false)
+  status_reason            String?
+  notes_count              Int       @default(0)
   notes                    String?
   custom_fields            Json?     @default("{}")
   last_contacted_at        DateTime? @db.Timestamptz(6)
+  first_contacted_at       DateTime? @db.Timestamptz(6)
+  last_activity_at         DateTime? @db.Timestamptz(6)
   next_follow_up           DateTime? @db.Timestamptz(6)
   expected_enrollment_date DateTime? @db.Date
   created_at               DateTime  @default(now()) @db.Timestamptz(6)
@@ -235,10 +254,13 @@ model crm_contacts {
   lead                     leads? @relation(fields: [lead_id], references: [id], onDelete: SetNull)
   university               universities? @relation(fields: [university_id], references: [id], onDelete: SetNull)
   pipeline_stage           pipeline_stages? @relation(fields: [stage_id], references: [id], onDelete: SetNull)
+  owner                    AppUser? @relation("ContactOwner", fields: [owner_id], references: [id], onDelete: SetNull)
   activities               crm_activities[]
   tasks                    crm_tasks[]
+  assignment_history       crm_assignment_history[]
 
-  @@index([stage_id, assigned_to])
+  @@index([stage_id, owner_id])
+  @@index([owner_id, next_follow_up])
   @@index([email, mobile])
 }
 
@@ -253,11 +275,14 @@ model crm_activities {
   scheduled_at     DateTime? @db.Timestamptz(6)
   completed_at     DateTime? @db.Timestamptz(6)
   created_by       String?
+  actor_id         String?   @db.Uuid
   metadata         Json?
   created_at       DateTime  @default(now()) @db.Timestamptz(6)
   contact          crm_contacts @relation(fields: [contact_id], references: [id], onDelete: Cascade)
+  actor            AppUser? @relation("ActivityActor", fields: [actor_id], references: [id], onDelete: SetNull)
 
   @@index([contact_id, created_at])
+  @@index([actor_id, created_at])
 }
 
 model crm_tasks {
@@ -268,11 +293,62 @@ model crm_tasks {
   status       String    @default("pending")
   priority     String    @default("medium")
   assigned_to  String?
+  assignee_id  String?   @db.Uuid
   due_at       DateTime? @db.Timestamptz(6)
   completed_at DateTime? @db.Timestamptz(6)
   created_at   DateTime  @default(now()) @db.Timestamptz(6)
   updated_at   DateTime  @updatedAt @db.Timestamptz(6)
   contact      crm_contacts? @relation(fields: [contact_id], references: [id], onDelete: SetNull)
+  assignee     AppUser? @relation("TaskAssignee", fields: [assignee_id], references: [id], onDelete: SetNull)
+
+  @@index([assignee_id, status, due_at])
+  @@index([contact_id, status])
+}
+
+model crm_teams {
+  id          String    @id @default(uuid()) @db.Uuid
+  name        String    @unique
+  description String?
+  manager_id  String?   @db.Uuid
+  is_active   Boolean   @default(true)
+  created_at  DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at  DateTime  @updatedAt @db.Timestamptz(6)
+  manager     AppUser?  @relation("TeamManager", fields: [manager_id], references: [id], onDelete: SetNull)
+  members     AppUser[] @relation("TeamMembers")
+
+  @@index([manager_id, is_active])
+}
+
+model crm_assignment_history {
+  id            String       @id @default(uuid()) @db.Uuid
+  contact_id    String       @db.Uuid
+  from_owner_id String?      @db.Uuid
+  to_owner_id   String?      @db.Uuid
+  changed_by_id String?      @db.Uuid
+  reason        String?
+  created_at    DateTime     @default(now()) @db.Timestamptz(6)
+  contact       crm_contacts @relation(fields: [contact_id], references: [id], onDelete: Cascade)
+  from_owner    AppUser?     @relation("AssignmentFromOwner", fields: [from_owner_id], references: [id], onDelete: SetNull)
+  to_owner      AppUser?     @relation("AssignmentToOwner", fields: [to_owner_id], references: [id], onDelete: SetNull)
+  changed_by    AppUser?     @relation("AssignmentChangedBy", fields: [changed_by_id], references: [id], onDelete: SetNull)
+
+  @@index([contact_id, created_at])
+  @@index([to_owner_id, created_at])
+}
+
+model crm_saved_views {
+  id         String   @id @default(uuid()) @db.Uuid
+  user_id    String   @db.Uuid
+  name       String
+  filters    Json     @default("{}")
+  columns    String[] @default([])
+  is_default Boolean  @default(false)
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+  updated_at DateTime @updatedAt @db.Timestamptz(6)
+  user       AppUser  @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@unique([user_id, name])
+  @@index([user_id, is_default])
 }
 
 model programs {

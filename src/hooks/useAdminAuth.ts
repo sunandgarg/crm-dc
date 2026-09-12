@@ -113,7 +113,7 @@ export function useAdminAuth(): AdminAuthState & { refetch: () => Promise<void> 
 
     try {
       // Ensure a profile exists for this user
-      const { data: existingProfile, error: profileReadError } = await withTimeout(
+      const { data: existingProfile, error: profileReadError } = (await withTimeout(
         supabase
         .from('profiles')
         .select('id')
@@ -121,7 +121,7 @@ export function useAdminAuth(): AdminAuthState & { refetch: () => Promise<void> 
         .maybeSingle(),
         ADMIN_AUTH_TIMEOUT_MS,
         'Profile lookup timed out.',
-      );
+      )) as { data: { id: string } | null; error: { message?: string } | null };
 
       if (profileReadError) {
         console.error('Error reading profile:', profileReadError);

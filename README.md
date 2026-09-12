@@ -8,7 +8,7 @@ Admissions CRM and partner lead-delivery platform built with React, TypeScript, 
 - API: Node.js 24+, TypeScript, Express 5
 - Data: PostgreSQL 16 and Prisma
 - Files: AWS S3 or Cloudflare R2 through presigned URLs
-- Authentication: passwordless email OTP through AWS SES and signed 12-hour sessions
+- Authentication: password or email OTP through AWS SES, with signed 12-hour sessions
 - Local infrastructure: Docker Compose with PostgreSQL and MinIO
 
 ## Run locally
@@ -23,9 +23,11 @@ pnpm db:seed
 pnpm dev
 ```
 
-Open `http://localhost:8080`. The API health endpoint is `http://localhost:4000/api/health`. In development, the sign-in screen displays the generated OTP when SES is not configured.
+Open `http://localhost:8080/crm/lead-management`. The API health endpoint is `http://localhost:4000/api/health`. In development, the sign-in screen displays the generated OTP when SES is not configured.
 
 The seeded administrator uses `BOOTSTRAP_ADMIN_EMAIL`. The included university is deliberately non-deliverable until its endpoint and credentials are replaced.
+
+The operational CRM includes a dashboard, searchable lead manager, CSV import/export, duplicate checks, saved views, configurable stages, drag-and-drop pipeline, lead assignment history, communication timeline, follow-ups, tasks, reports, user/team administration, role-based permissions, and audit history. The existing Lead Push workflows remain available under `/lead-push`.
 
 ## Important commands
 
@@ -33,6 +35,7 @@ The seeded administrator uses `BOOTSTRAP_ADMIN_EMAIL`. The included university i
 pnpm test
 pnpm build
 pnpm check
+CRM_SMOKE_ADMIN_EMAIL=admin@example.com CRM_SMOKE_ADMIN_PASSWORD=... pnpm smoke:crm
 pnpm db:migrate
 pnpm db:seed
 pnpm db:studio

@@ -211,7 +211,7 @@ function normalizeOptionValues(value: unknown): Array<{ value: string; parentVal
   if (!Array.isArray(parsed)) return [];
 
   return parsed
-    .map((entry) => {
+    .map((entry): { value: string; parentValue?: string } | null => {
       if (typeof entry === "string" || typeof entry === "number" || typeof entry === "boolean") {
         const normalized = String(entry).trim();
         return normalized ? { value: normalized } : null;
@@ -235,7 +235,7 @@ function normalizeCustomColumns(value: unknown): CustomColumn[] {
   if (!Array.isArray(parsed)) return [];
 
   return parsed
-    .map((entry, index) => {
+    .map((entry, index): CustomColumn | null => {
       if (!entry || typeof entry !== "object" || Array.isArray(entry)) return null;
       const record = entry as Record<string, unknown>;
       const columnKey = String(record.columnKey ?? record.column_key ?? "").trim();

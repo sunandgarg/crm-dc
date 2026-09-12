@@ -23,6 +23,7 @@
     "admin:provision": "tsx scripts/provision-admin.ts",
     "db:studio": "prisma studio",
     "test": "vitest run",
+    "smoke:crm": "tsx scripts/smoke-crm.ts",
     "check": "pnpm lint && pnpm test && pnpm build",
     "audit:supabase": "node scripts/audit-supabase.mjs",
     "lint": "eslint .",

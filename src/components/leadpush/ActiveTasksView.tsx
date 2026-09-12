@@ -51,9 +51,10 @@ function ActiveTasksViewInner() {
         .limit(100);
 
       if (error) throw error;
+      const batches = (data || []) as BatchTask[];
 
       // Batch fetch university names (use cache)
-      const uniIds = [...new Set((data || []).map(b => b.university_id).filter(Boolean))];
+      const uniIds = [...new Set(batches.map(b => b.university_id).filter(Boolean))];
       const uncachedUniIds = uniIds.filter(id => !uniCache.has(id));
       if (uncachedUniIds.length > 0) {
         const { data: unis } = await supabase.from('universities').select('id, name').in('id', uncachedUniIds);
@@ -61,14 +62,14 @@ function ActiveTasksViewInner() {
       }
 
       // Batch fetch user emails (use cache)
-      const userIds = [...new Set((data || []).map(b => b.user_id).filter(Boolean))];
+      const userIds = [...new Set(batches.map(b => b.user_id).filter(Boolean))];
       const uncachedUserIds = userIds.filter(id => !userCache.has(id));
       if (uncachedUserIds.length > 0) {
         const { data: profiles } = await supabase.from('profiles').select('id, email').in('id', uncachedUserIds);
         (profiles || []).forEach(p => userCache.set(p.id, p.email || 'Unknown'));
       }
 
-      setTasks((data || []).map(b => ({
+      setTasks(batches.map(b => ({
         ...b,
         is_paused: b.is_paused || false,
         is_cancelled: b.is_cancelled || false,

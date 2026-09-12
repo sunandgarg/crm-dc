@@ -12,6 +12,7 @@ import { functionsRouter } from "./routes/functions.js";
 import { rpcRouter } from "./routes/rpc.js";
 import { publicFunctionsRouter } from "./routes/publicFunctions.js";
 import { storageRouter } from "./routes/storage.js";
+import { crmRouter } from "./routes/crm.js";
 import { rateLimit } from "./middleware/rateLimit.js";
 
 export const app = express();
@@ -41,6 +42,7 @@ app.get("/api/readiness", async (_request, response) => {
   }
 });
 app.use("/api/auth", rateLimit("auth", 15 * 60_000, config.AUTH_RATE_LIMIT_PER_15_MINUTES), authRouter);
+app.use("/api/crm", crmRouter);
 app.use("/api/functions", rateLimit("public", 60_000, config.PUBLIC_RATE_LIMIT_PER_MINUTE), publicFunctionsRouter);
 app.use("/api/data", dataRouter);
 app.use("/api/rpc", rpcRouter);

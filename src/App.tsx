@@ -62,6 +62,7 @@ const Auth = lazyWithRetry(() => import("./pages/Auth"));
 const NotFound = lazyWithRetry(() => import("./pages/NotFound"));
 const UrlRedirect = lazyWithRetry(() => import("./pages/UrlRedirect"));
 const Index = lazyWithRetry(() => import("./pages/Index"));
+const CRMWorkspace = lazyWithRetry(() => import("./components/crm/meritto/CRMWorkspace"));
 // Optimized QueryClient with aggressive caching
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -86,6 +87,7 @@ LoadingFallback.displayName = "LoadingFallback";
 
 // Memoized Index to prevent re-renders
 const MemoizedIndex = memo(Index);
+const MemoizedCRMWorkspace = memo(CRMWorkspace);
 
 class AppErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean; message: string }> {
   state = { hasError: false, message: "" };
@@ -171,6 +173,16 @@ function ProtectedLayout() {
 
 const StableProtectedLayout = memo(ProtectedLayout);
 
+function ProtectedCRMLayout() {
+  return (
+    <ProtectedRoute>
+      <MemoizedCRMWorkspace />
+    </ProtectedRoute>
+  );
+}
+
+const StableProtectedCRMLayout = memo(ProtectedCRMLayout);
+
 // Route state saver - handles persistence WITHOUT triggering refetches
 function RouteStateSaver() {
   const location = useLocation();
@@ -240,10 +252,10 @@ function AppRoutes() {
           <Route path="/logs" element={<Navigate to="/crm/lead-management" replace />} />
           <Route path="/marketing" element={<Navigate to="/crm/lead-management" replace />} />
           <Route path="/marketing/*" element={<Navigate to="/crm/lead-management" replace />} />
-          <Route path="/crm/*" element={<StableProtectedLayout />} />
+          <Route path="/crm/*" element={<StableProtectedCRMLayout />} />
           <Route path="/all-leads" element={<Navigate to="/crm/lead-management" replace />} />
           <Route path="/dashboard" element={<Navigate to="/crm/analytics" replace />} />
-          <Route path="/lead-push/*" element={<Navigate to="/crm/lead-management" replace />} />
+          <Route path="/lead-push/*" element={<StableProtectedLayout />} />
           <Route path="/connections/*" element={<Navigate to="/crm/settings" replace />} />
           <Route path="/automation/*" element={<Navigate to="/crm/settings" replace />} />
           <Route path="/settings/*" element={<Navigate to="/crm/settings" replace />} />
